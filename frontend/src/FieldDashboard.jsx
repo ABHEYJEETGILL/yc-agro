@@ -1,0 +1,338 @@
+import { useEffect, useRef, useState } from "react";
+
+// ============================================================
+// YC Agro — Field Dashboard
+// Leaflet map centered on the Bathinda field. Farmer draws/edits
+// the field boundary; on save it POSTs a GeoJSON Polygon to:
+//   PUT /api/farmers/me/field   { polygon: {type:"Polygon", coordinates:[...]} }
+//
+// Leaflet + leaflet-draw are loaded from CDN at runtime (no npm
+// build step needed for the artifact preview). In your real Vite
+// app, prefer: npm i leaflet leaflet-draw  and import them.
+//
+// NDVI overlay: the pipeline writes a PNG (red→green health map)
+// aligned to the field bbox. Drop its URL + bounds into `ndvi`
+// and it renders as an image overlay. Mocked here with the
+// baseline scan numbers (223×194 px, 1.7% stressed).
+// ============================================================
+
+const FIELD_CENTER = [30.3375, 74.9385]; // Bathinda test field
+const DEFAULT_POLY = [
+  [30.339, 74.938],
+  [30.339, 74.939],
+  [30.336, 74.939],
+  [30.337, 74.938],
+];
+
+const T = {
+  en: {
+    title: "My Field",
+    draw: "Draw field boundary",
+    redraw: "Redraw boundary",
+    save: "Save field",
+    saving: "Saving…",
+    saved: "Field saved",
+    healthTitle: "Field health",
+    lastScan: "Last scan",
+    healthy: "Healthy",
+    stressed: "Needs attention",
+    noField: "Draw your field on the map to start monitoring.",
+    legend: { healthy: "Healthy", moderate: "Some stress", stressed: "Stressed crop" },
+    acres: "acres",
+    scanNow: "Request scan",
+  },
+  pa: {
+    title: "ਮੇਰਾ ਖੇਤ",
+    draw: "ਖੇਤ ਦੀ ਹੱਦ ਬਣਾਓ",
+    redraw: "ਹੱਦ ਦੁਬਾਰਾ ਬਣਾਓ",
+    save: "ਖੇਤ ਸੰਭਾਲੋ",
+    saving: "ਸੰਭਾਲ ਰਿਹਾ ਹੈ…",
+    saved: "ਖੇਤ ਸੰਭਾਲ ਲਿਆ",
+    healthTitle: "ਖੇਤ ਦੀ ਸਿਹਤ",
+    lastScan: "ਪਿਛਲੀ ਜਾਂਚ",
+    healthy: "ਤੰਦਰੁਸਤ",
+    stressed: "ਧਿਆਨ ਦੀ ਲੋੜ",
+    noField: "ਨਿਗਰਾਨੀ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਨਕਸ਼ੇ 'ਤੇ ਆਪਣਾ ਖੇਤ ਬਣਾਓ।",
+    legend: { healthy: "ਤੰਦਰੁਸਤ", moderate: "ਥੋੜ੍ਹਾ ਤਣਾਅ", stressed: "ਤਣਾਅ ਵਾਲੀ ਫਸਲ" },
+    acres: "ਏਕੜ",
+    scanNow: "ਜਾਂਚ ਮੰਗੋ",
+  },
+};
+
+// Mock scan result — replace with GET /api/farmers/me/scan from the pipeline
+const MOCK_SCAN = {
+  date: "2026-05-26",
+  stressedPct: 1.7,
+  healthyPct: 94.3,
+  ndviUrl: null, // when pipeline produces the PNG, put its URL here
+};
+
+const C = {
+  bg: "#10271a",
+  card: "#f7f5ef",
+  green: "#1e4d2b",
+  gold: "#d9a441",
+  rust: "#a63d2f",
+  ink: "#2c3527",
+  muted: "#5a6354",
+};
+
+export default function FieldDashboard({ lang: initialLang = "pa" }) {
+  const [lang, setLang] = useState(initialLang);
+  const t = T[lang];
+  const mapRef = useRef(null);
+  const mapObj = useRef(null);
+  const layerRef = useRef(null);
+  const [hasField, setHasField] = useState(true);
+  const [acres, setAcres] = useState(0);
+  const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
+  const scan = MOCK_SCAN;
+  const healthy = scan.stressedPct < 5;
+
+  // Load Leaflet + leaflet-draw from CDN, then init the map once
+  useEffect(() => {
+    let cancelled = false;
+    function add(tag, attrs) {
+      return new Promise((res) => {
+        const el = document.createElement(tag);
+        Object.assign(el, attrs);
+        el.onload = res;
+        document.head.appendChild(el);
+      });
+    }
+    (async () => {
+      if (!window.L) {
+        await add("link", {
+          rel: "stylesheet",
+          href: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
+        });
+        await add("script", { src: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" });
+        await add("link", {
+          rel: "stylesheet",
+          href: "https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css",
+        });
+        await add("script", {
+          src: "https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js",
+        });
+      }
+      if (cancelled || mapObj.current) return;
+      initMap();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function shoelaceAcres(latlngs) {
+    // Approx area via planar shoelace on lat/lng → m² → acres.
+    // Good enough for field-size display at this scale.
+    const R = 111320; // m per degree latitude
+    const latMid = (latlngs.reduce((s, p) => s + p.lat, 0) / latlngs.length) * Math.PI / 180;
+    const pts = latlngs.map((p) => [
+      p.lng * R * Math.cos(latMid),
+      p.lat * R,
+    ]);
+    let a = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const [x1, y1] = pts[i];
+      const [x2, y2] = pts[(i + 1) % pts.length];
+      a += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(a / 2) / 4046.86; // m² → acres
+  }
+
+  function recalc(layer) {
+    const latlngs = layer.getLatLngs()[0];
+    setAcres(shoelaceAcres(latlngs));
+    setHasField(true);
+    setSaveState("idle");
+  }
+
+  function initMap() {
+    const L = window.L;
+    const map = L.map(mapRef.current).setView(FIELD_CENTER, 16);
+    L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19, attribution: "Esri" }
+    ).addTo(map);
+
+    const drawn = new L.FeatureGroup();
+    map.addLayer(drawn);
+
+    // Seed with the known field polygon
+    const poly = L.polygon(DEFAULT_POLY, { color: C.gold, weight: 3, fillOpacity: 0.15 });
+    drawn.addLayer(poly);
+    layerRef.current = poly;
+    recalc(poly);
+    map.fitBounds(poly.getBounds(), { padding: [40, 40] });
+
+    const drawControl = new L.Control.Draw({
+      edit: { featureGroup: drawn },
+      draw: {
+        polygon: { shapeOptions: { color: C.gold, weight: 3 } },
+        polyline: false,
+        rectangle: false,
+        circle: false,
+        marker: false,
+        circlemarker: false,
+      },
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, (e) => {
+      drawn.clearLayers();
+      drawn.addLayer(e.layer);
+      layerRef.current = e.layer;
+      recalc(e.layer);
+    });
+    map.on(L.Draw.Event.EDITED, () => {
+      if (layerRef.current) recalc(layerRef.current);
+    });
+
+    mapObj.current = map;
+  }
+
+  async function saveField() {
+    if (!layerRef.current) return;
+    // GeoJSON Polygon: [lng, lat] order, ring closed (first === last)
+    const ring = layerRef.current.getLatLngs()[0].map((p) => [p.lng, p.lat]);
+    ring.push(ring[0]);
+    const polygon = { type: "Polygon", coordinates: [ring] };
+
+    setSaveState("saving");
+    try {
+      const token = await user.getIdToken();
+      await fetch("http://localhost:5000/api/farmers/me/field", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ polygon }),
+      });
+      await new Promise((r) => setTimeout(r, 700)); // mock latency
+      console.log("would PUT /api/farmers/me/field", polygon);
+      setSaveState("saved");
+    } catch {
+      setSaveState("idle");
+    }
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px" }}>
+        <h1 style={{ color: C.card, margin: 0, fontSize: 22, fontWeight: 800 }}>
+          🌾 YC Agro <span style={{ color: C.gold }}>· {t.title}</span>
+        </h1>
+        <div>
+          <button style={langBtn(lang === "pa")} onClick={() => setLang("pa")}>ਪੰਜਾਬੀ</button>
+          <span style={{ color: "#566" }}>|</span>
+          <button style={langBtn(lang === "en")} onClick={() => setLang("en")}>English</button>
+        </div>
+      </header>
+
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 16, padding: "0 16px 24px", maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ borderRadius: 14, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,0.4)" }}>
+          <div ref={mapRef} style={{ width: "100%", height: 520, background: "#0c1a12" }} />
+        </div>
+
+        <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <Panel>
+            <Row label={t.title} value={`${acres.toFixed(1)} ${t.acres}`} />
+            <button
+              style={{ ...primaryBtn, opacity: saveState === "saving" ? 0.7 : 1 }}
+              disabled={saveState === "saving"}
+              onClick={saveField}
+            >
+              {saveState === "saving" ? t.saving : saveState === "saved" ? `✓ ${t.saved}` : t.save}
+            </button>
+            <p style={{ fontSize: 12, color: C.muted, margin: "8px 0 0", lineHeight: 1.4 }}>
+              {t.draw} → {t.save}
+            </p>
+          </Panel>
+
+          <Panel>
+            <h3 style={{ margin: "0 0 10px", color: C.green, fontSize: 16 }}>{t.healthTitle}</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <span style={{
+                width: 14, height: 14, borderRadius: "50%",
+                background: healthy ? "#2f6b35" : C.rust,
+              }} />
+              <b style={{ color: healthy ? "#2f6b35" : C.rust, fontSize: 17 }}>
+                {healthy ? t.healthy : t.stressed}
+              </b>
+            </div>
+            <Row label={t.lastScan} value={scan.date} />
+            <Bar healthy={scan.healthyPct} stressed={scan.stressedPct} />
+            <Legend t={t} />
+            <button style={{ ...primaryBtn, background: C.green, color: C.card, marginTop: 14 }}>
+              {t.scanNow}
+            </button>
+          </Panel>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function Panel({ children }) {
+  return (
+    <div style={{ background: C.card, borderRadius: 14, padding: 18, boxShadow: "0 6px 20px rgba(0,0,0,0.25)" }}>
+      {children}
+    </div>
+  );
+}
+function Row({ label, value }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.ink, marginBottom: 8 }}>
+      <span style={{ color: C.muted }}>{label}</span>
+      <b>{value}</b>
+    </div>
+  );
+}
+function Bar({ healthy, stressed }) {
+  const moderate = Math.max(0, 100 - healthy - stressed);
+  return (
+    <div style={{ display: "flex", height: 10, borderRadius: 6, overflow: "hidden", margin: "6px 0 10px" }}>
+      <div style={{ width: `${healthy}%`, background: "#2f6b35" }} />
+      <div style={{ width: `${moderate}%`, background: C.gold }} />
+      <div style={{ width: `${stressed}%`, background: C.rust }} />
+    </div>
+  );
+}
+function Legend({ t }) {
+  const items = [
+    ["#2f6b35", t.legend.healthy],
+    [C.gold, t.legend.moderate],
+    [C.rust, t.legend.stressed],
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      {items.map(([c, label]) => (
+        <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.ink }}>
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: c }} />
+          {label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const primaryBtn = {
+  width: "100%",
+  padding: "12px 0",
+  fontSize: 15,
+  fontWeight: 800,
+  borderRadius: 8,
+  border: "none",
+  background: C.gold,
+  color: "#2a2410",
+  cursor: "pointer",
+  marginTop: 6,
+};
+const langBtn = (active) => ({
+  border: "none",
+  background: "transparent",
+  color: active ? C.gold : "#7d8a78",
+  fontWeight: active ? 800 : 500,
+  fontSize: 13,
+  cursor: "pointer",
+  padding: "2px 6px",
+});

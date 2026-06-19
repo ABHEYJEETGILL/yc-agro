@@ -1,5 +1,6 @@
 import { useState } from "react";
-
+import { auth } from "./firebase";
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 // ============================================================
 // YC Agro — Login + Farmer Registration
 // Phone-first auth (farmers rarely use email).
@@ -181,7 +182,7 @@ const css = {
   }),
 };
 
-export default function AuthScreen() {
+export default function AuthScreen({ onAuthed }) {
   const [lang, setLang] = useState("pa");
   const [mode, setMode] = useState("login"); // login | register
   const [step, setStep] = useState("form"); // form | otp | done
@@ -196,28 +197,65 @@ export default function AuthScreen() {
 
   const validPhone = /^[6-9]\d{9}$/.test(phone);
 
-  const sendOtp = () => {
-    const e = {};
-    if (!validPhone) e.phone = t.errPhone;
-    if (mode === "register") {
-      if (!name.trim()) e.name = t.errName;
-      if (!village.trim()) e.village = t.errVillage;
-      if (!acreage || Number(acreage) <= 0) e.acreage = t.errAcre;
+  const sendOtp = async () => {
+  const e = {};
+  if (!validPhone) e.phone = t.errPhone;
+  if (mode === "register") {
+    if (!name.trim()) e.name = t.errName;
+    if (!village.trim()) e.village = t.errVillage;
+    if (!acreage || Number(acreage) <= 0) e.acreage = t.errAcre;
+  }
+  setErrors(e);
+  if (Object.keys(e).length) return;
+
+  try {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible",
+      });
     }
-    setErrors(e);
-    if (Object.keys(e).length) return;
-    // TODO: Firebase — signInWithPhoneNumber(auth, "+91" + phone, recaptcha)
+    const confirmation = await signInWithPhoneNumber(
+      auth,
+      "+91" + phone,
+      window.recaptchaVerifier
+    );
+    window.confirmationResult = confirmation;
     setStep("otp");
-  };
+  } catch (err) {
+    setErrors({ phone: "Could not send code. Try again." });
+    console.error(err);
+  }
+};
 
-  const verify = () => {
-    if (!/^\d{6}$/.test(otp)) return setErrors({ otp: t.errOtp });
-    setErrors({});
-    // TODO: confirmationResult.confirm(otp) → then if registering,
-    // POST { name, phone, village, acreage, crop } to /api/farmers/register
+  const verify = async () => {
+  if (!/^\d{6}$/.test(otp)) return setErrors({ otp: t.errOtp });
+  setErrors({});
+  try {
+    const result = await window.confirmationResult.confirm(otp);
+    const token = await result.user.getIdToken();
+    if (mode === "register") {
+      await fetch("http://localhost:5000/api/farmers/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name,
+          village,
+          acreage,
+          crop: ["paddy", "wheat", "cotton", "other"][crop],
+          lang,
+        }),
+      });
+    }
     setStep("done");
-  };
-
+    setTimeout(() => onAuthed && onAuthed(result.user), 1200);
+  } catch (err) {
+    setErrors({ otp: "Wrong or expired code." });
+    console.error(err);
+  }
+};
   return (
     <div style={css.page}>
       <div style={css.card}>
@@ -238,7 +276,7 @@ export default function AuthScreen() {
           </div>
           <p style={css.tagline}>{t.tagline}</p>
         </div>
-
+        <div id="recaptcha-container"></div>
         <div style={css.body}>
           {step === "form" && (
             <>
