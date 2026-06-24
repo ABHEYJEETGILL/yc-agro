@@ -41,22 +41,6 @@ const T = {
     acres: "acres",
     scanNow: "Request scan",
   },
-  pa: {
-    title: "ਮੇਰਾ ਖੇਤ",
-    draw: "ਖੇਤ ਦੀ ਹੱਦ ਬਣਾਓ",
-    redraw: "ਹੱਦ ਦੁਬਾਰਾ ਬਣਾਓ",
-    save: "ਖੇਤ ਸੰਭਾਲੋ",
-    saving: "ਸੰਭਾਲ ਰਿਹਾ ਹੈ…",
-    saved: "ਖੇਤ ਸੰਭਾਲ ਲਿਆ",
-    healthTitle: "ਖੇਤ ਦੀ ਸਿਹਤ",
-    lastScan: "ਪਿਛਲੀ ਜਾਂਚ",
-    healthy: "ਤੰਦਰੁਸਤ",
-    stressed: "ਧਿਆਨ ਦੀ ਲੋੜ",
-    noField: "ਨਿਗਰਾਨੀ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਨਕਸ਼ੇ 'ਤੇ ਆਪਣਾ ਖੇਤ ਬਣਾਓ।",
-    legend: { healthy: "ਤੰਦਰੁਸਤ", moderate: "ਥੋੜ੍ਹਾ ਤਣਾਅ", stressed: "ਤਣਾਅ ਵਾਲੀ ਫਸਲ" },
-    acres: "ਏਕੜ",
-    scanNow: "ਜਾਂਚ ਮੰਗੋ",
-  },
 };
 
 // Mock scan result — replace with GET /api/farmers/me/scan from the pipeline
@@ -77,9 +61,8 @@ const C = {
   muted: "#5a6354",
 };
 
-export default function FieldDashboard({ lang: initialLang = "pa" }) {
-  const [lang, setLang] = useState(initialLang);
-  const t = T[lang];
+export default function FieldDashboard({ user }) {
+  const t = T.en;
   const mapRef = useRef(null);
   const mapObj = useRef(null);
   const layerRef = useRef(null);
@@ -192,28 +175,43 @@ export default function FieldDashboard({ lang: initialLang = "pa" }) {
     mapObj.current = map;
   }
 
-  async function saveField() {
-    if (!layerRef.current) return;
-    // GeoJSON Polygon: [lng, lat] order, ring closed (first === last)
-    const ring = layerRef.current.getLatLngs()[0].map((p) => [p.lng, p.lat]);
-    ring.push(ring[0]);
-    const polygon = { type: "Polygon", coordinates: [ring] };
-
-    setSaveState("saving");
-    try {
-      const token = await user.getIdToken();
-      await fetch("http://localhost:5000/api/farmers/me/field", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ polygon }),
-      });
-      await new Promise((r) => setTimeout(r, 700)); // mock latency
-      console.log("would PUT /api/farmers/me/field", polygon);
-      setSaveState("saved");
-    } catch {
-      setSaveState("idle");
-    }
+  function layerToGeoJSON(layer) {
+  const latlngs = layer.getLatLngs()[0]; // array of {lat, lng}
+  const coords = latlngs.map((p) => [p.lng, p.lat]); // GeoJSON is [lng, lat]
+  // close the ring — first point repeated as last
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) {
+    coords.push(first);
   }
+  return { type: "Polygon", coordinates: [coords] };
+}
+
+const saveField = async () => {
+  if (!layerRef.current) return;
+  setSaveState("saving");
+  try {
+    const polygon = layerToGeoJSON(layerRef.current);
+    const token = await user.getIdToken();
+    const res = await fetch("http://localhost:5000/api/farmers/me/field", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ polygon }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Save failed: ${res.status}`);
+    }
+    setSaveState("saved");
+  } catch (err) {
+    console.error(err);
+    setSaveState("idle");
+    alert("Couldn't save field — check the server is running.");
+  }
+};
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
@@ -221,11 +219,6 @@ export default function FieldDashboard({ lang: initialLang = "pa" }) {
         <h1 style={{ color: C.card, margin: 0, fontSize: 22, fontWeight: 800 }}>
           🌾 YC Agro <span style={{ color: C.gold }}>· {t.title}</span>
         </h1>
-        <div>
-          <button style={langBtn(lang === "pa")} onClick={() => setLang("pa")}>ਪੰਜਾਬੀ</button>
-          <span style={{ color: "#566" }}>|</span>
-          <button style={langBtn(lang === "en")} onClick={() => setLang("en")}>English</button>
-        </div>
       </header>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 16, padding: "0 16px 24px", maxWidth: 1200, margin: "0 auto" }}>
@@ -327,12 +320,3 @@ const primaryBtn = {
   cursor: "pointer",
   marginTop: 6,
 };
-const langBtn = (active) => ({
-  border: "none",
-  background: "transparent",
-  color: active ? C.gold : "#7d8a78",
-  fontWeight: active ? 800 : 500,
-  fontSize: 13,
-  cursor: "pointer",
-  padding: "2px 6px",
-});

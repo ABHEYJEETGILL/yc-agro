@@ -100,7 +100,7 @@ def register_farmer():
         "village": village,
         "acreage": acreage,
         "crop": crop,
-        "lang": data.get("lang", "pa"),
+        "lang": data.get("lang", "en"),
         "field": None,              # GeoJSON polygon, set later on the map screen
         "created_at": datetime.now(timezone.utc),
     }
