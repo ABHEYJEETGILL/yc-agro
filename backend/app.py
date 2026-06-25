@@ -1,34 +1,23 @@
 """
 YC Agro — Flask backend
-=======================
-Endpoints:
-  POST /api/farmers/register   create farmer profile after phone auth
-  GET  /api/farmers/me         fetch own profile
-  PUT  /api/farmers/me/field   save field polygon (GeoJSON)
-  GET  /api/health             liveness check
-
-Auth model:
-  Frontend signs in with Firebase Phone Auth and sends the ID token
-  in the Authorization header:  Authorization: Bearer <idToken>
-  The backend verifies it with firebase_admin — never trust the phone
-  number from the request body.
-
-Setup:
-  pip install flask flask-cors firebase-admin
-  Download a service-account key from Firebase Console →
-  Project Settings → Service Accounts, save as serviceAccountKey.json
-  (NEVER commit this file — add it to .gitignore).
 """
 
 import os
-from datetime import datetime, timezone
+import io
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
+import numpy as np
+import requests
+from PIL import Image
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
+
+import ee
+from ultralytics import YOLO
 
 # ── Firebase init ────────────────────────────────────────────
 cred_path = os.environ.get("FIREBASE_CRED", "serviceAccountKey.json")
@@ -39,6 +28,16 @@ app = Flask(__name__)
 CORS(app, origins=os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(","))
 
 VALID_CROPS = {"paddy", "wheat", "cotton", "other"}
+
+# ── Earth Engine init (service account, not interactive) ────
+EE_CRED_PATH = os.environ.get("EE_CRED", "gee-service-account.json")
+ee_credentials = ee.ServiceAccountCredentials(
+    "yc-agro-ee-backend@yc-agro.iam.gserviceaccount.com", EE_CRED_PATH
+)
+ee.Initialize(ee_credentials)
+
+YOLO_MODEL_PATH = os.environ.get("YOLO_MODEL_PATH", "ycagro_v3_best_91.pt")
+yolo_model = YOLO(YOLO_MODEL_PATH)
 
 
 # ── Auth decorator ───────────────────────────────────────────
@@ -53,7 +52,7 @@ def require_auth(fn):
         except Exception:
             return jsonify(error="Invalid or expired token"), 401
         g.uid = decoded["uid"]
-        g.phone = decoded.get("phone_number")  # e.g. "+919876543210"
+        g.phone = decoded.get("phone_number")
         return fn(*args, **kwargs)
     return wrapper
 
@@ -95,13 +94,13 @@ def register_farmer():
 
     farmer = {
         "uid": g.uid,
-        "phone": g.phone,           # from verified token, not request body
+        "phone": g.phone,
         "name": name,
         "village": village,
         "acreage": acreage,
         "crop": crop,
         "lang": data.get("lang", "en"),
-        "field": None,              # GeoJSON polygon, set later on the map screen
+        "field": None,
         "created_at": datetime.now(timezone.utc),
     }
     doc_ref.set(farmer)
@@ -116,9 +115,9 @@ def get_me():
     if not snap.exists:
         return jsonify(error="Not registered"), 404
     d = snap.to_dict()
-    if d.get("created_at"):
-        d["created_at"] = d["created_at"].isoformat()
-    return jsonify(farmer=d)
+    if d.get("field"):
+        d["field"] = from_firestore_safe(d["field"])
+    
 
 
 @app.put("/api/farmers/me/field")
@@ -128,7 +127,6 @@ def save_field():
     data = request.get_json(silent=True) or {}
     poly = data.get("polygon")
 
-    # Minimal GeoJSON Polygon validation
     if (
         not isinstance(poly, dict)
         or poly.get("type") != "Polygon"
@@ -141,9 +139,133 @@ def save_field():
     doc_ref = db.collection("farmers").document(g.uid)
     if not doc_ref.get().exists:
         return jsonify(error="Not registered"), 404
+    
+    def to_firestore_safe(poly):
+    #Firestore disallows nested arrays — convert each [lng,lat] pair to a map."""
+        coords = poly["coordinates"][0]
+        safe_coords = [{"lng": pt[0], "lat": pt[1]} for pt in coords]
+        return {"type": poly["type"], "coordinates": safe_coords}
 
-    doc_ref.update({"field": poly, "field_updated_at": datetime.now(timezone.utc)})
+
+    def from_firestore_safe(stored):
+    #Reverse of the above — back to standard GeoJSON for the frontend."""
+        if not stored:
+            return None
+        coords = [[pt["lng"], pt["lat"]] for pt in stored["coordinates"]]
+        return {"type": stored["type"], "coordinates": [coords]}
+    
+    doc_ref.update({"field": to_firestore_safe(poly), "field_updated_at": datetime.now(timezone.utc)})
     return jsonify(ok=True)
+
+
+# ── Scan pipeline ─────────────────────────────────────────────
+def band_to_numpy(image, band_name, region, scale=10):
+    url = image.select(band_name).getDownloadURL(
+        {"scale": scale, "region": region, "format": "NPY"}
+    )
+    r = requests.get(url)
+    r.raise_for_status()
+    return np.load(io.BytesIO(r.content))
+
+
+def run_scan_pipeline(polygon_geojson):
+    """polygon_geojson: {"type": "Polygon", "coordinates": [[[lng,lat], ...]]}"""
+    region = ee.Geometry.Polygon(polygon_geojson["coordinates"])
+
+    s2 = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(region)
+        .filterDate(
+            (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%d"),
+            datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        )
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 10))
+        .sort("CLOUDY_PIXEL_PERCENTAGE")
+        .first()
+    )
+
+    red_raw = band_to_numpy(s2, "B4", region)
+    nir_raw = band_to_numpy(s2, "B8", region)
+    red = red_raw[red_raw.dtype.names[0]].astype(float)
+    nir = nir_raw[nir_raw.dtype.names[0]].astype(float)
+    ndvi = (nir - red) / (nir + red + 1e-8)
+
+    total = ndvi.size
+    stressed_pct = float(100 * (ndvi < 0.3).mean())
+    healthy_pct = float(100 * (ndvi >= 0.5).mean())
+
+    detections = []
+    anomaly_mask = ndvi < 0.3
+    rows = np.any(anomaly_mask, axis=1)
+    cols = np.any(anomaly_mask, axis=0)
+    if rows.any() and cols.any():
+        rmin, rmax = np.where(rows)[0][[0, -1]]
+        cmin, cmax = np.where(cols)[0][[0, -1]]
+        crop_red = red[rmin:rmax, cmin:cmax]
+        crop_nir = nir[rmin:rmax, cmin:cmax]
+
+        def norm(a):
+            return ((a - a.min()) / (a.max() - a.min() + 1e-8) * 255).astype(np.uint8)
+
+        if crop_red.size and crop_nir.size:
+            img_arr = np.stack([norm(crop_red), norm(crop_nir), norm(crop_nir)], axis=-1)
+            img = Image.fromarray(img_arr).resize((640, 640))
+            tmp_path = "anomaly_crop.jpg"  # relative path — see Windows note below
+            img.save(tmp_path)
+            results = yolo_model(tmp_path, conf=0.4)
+            boxes = results[0].boxes
+            if boxes is not None and len(boxes):
+                for box in boxes:
+                    detections.append({
+                        "label": yolo_model.names[int(box.cls[0])],
+                        "confidence": float(box.conf[0]),
+                    })
+
+    return {
+        "date": datetime.now(timezone.utc).date().isoformat(),
+        "stressedPct": round(stressed_pct, 1),
+        "healthyPct": round(healthy_pct, 1),
+        "detections": detections,
+        "total_pixels": int(total),
+    }
+
+
+@app.post("/api/farmers/me/scan")
+@require_auth
+def trigger_scan():
+    doc_ref = db.collection("farmers").document(g.uid)
+    snap = doc_ref.get()
+    if not snap.exists:
+        return jsonify(error="Not registered"), 404
+    farmer = snap.to_dict()
+    field = farmer.get("field")
+    if not field:
+        return jsonify(error="Draw and save your field boundary first"), 400
+
+    try:
+        scan_result = run_scan_pipeline(field)
+    except Exception as err:
+        print("Scan pipeline failed:", err)
+        return jsonify(error="Scan failed — try again in a moment"), 500
+
+    doc_ref.update({
+        "last_scan": scan_result,
+        "last_scan_at": datetime.now(timezone.utc),
+    })
+    return jsonify(scan=scan_result)
+
+
+@app.get("/api/farmers/me/scan")
+@require_auth
+def get_scan():
+    snap = db.collection("farmers").document(g.uid).get()
+    if not snap.exists:
+        return jsonify(error="Not registered"), 404
+    farmer = snap.to_dict()
+    scan = farmer.get("last_scan")
+    if not scan:
+        return jsonify(scan=None)
+    return jsonify(scan=scan)
 
 
 if __name__ == "__main__":

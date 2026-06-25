@@ -3,73 +3,49 @@ import { auth } from "./firebase";
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 // ============================================================
 // YC Agro — Login + Farmer Registration
-// Phone-first auth (farmers rarely use email).
-// Firebase wiring: replace the mock handlers below with
-// Firebase Phone Auth (signInWithPhoneNumber + RecaptchaVerifier)
-// and POST the registration payload to the Flask backend:
+// Phone-first auth. Firebase Phone Auth (signInWithPhoneNumber +
+// RecaptchaVerifier). Registration POSTs to the Flask backend:
 //   POST /api/farmers/register
 // ============================================================
 
 const T = {
-  en: {
-    brand: "YC Agro",
-    tagline: "Satellite eyes on your field. Spray only where it's needed.",
-    login: "Log in",
-    register: "New farmer",
-    phone: "Mobile number",
-    phonePh: "10-digit mobile number",
-    sendOtp: "Send OTP",
-    otp: "Enter the 6-digit code",
-    otpSent: "Code sent to",
-    verify: "Verify and continue",
-    resend: "Send code again",
-    name: "Full name",
-    namePh: "e.g. Gurpreet Singh",
-    village: "Village / town",
-    villagePh: "e.g. Bhucho Mandi, Bathinda",
-    acreage: "Field size (acres)",
-    acreagePh: "e.g. 12",
-    crop: "Main crop this season",
-    createAccount: "Create account",
-    haveAccount: "Already registered? Log in",
-    newHere: "New to YC Agro? Register",
-    crops: ["Paddy (rice)", "Wheat", "Cotton", "Other"],
-    errPhone: "Enter a valid 10-digit mobile number",
-    errOtp: "Enter the 6-digit code",
-    errName: "Enter your name",
-    errVillage: "Enter your village or town",
-    errAcre: "Enter your field size in acres",
-  },
-  pa: {
-    brand: "YC Agro",
-    tagline: "ਤੁਹਾਡੇ ਖੇਤ 'ਤੇ ਸੈਟੇਲਾਈਟ ਦੀ ਨਜ਼ਰ। ਸਪਰੇਅ ਸਿਰਫ਼ ਉੱਥੇ ਜਿੱਥੇ ਲੋੜ ਹੈ।",
-    login: "ਲਾਗਇਨ",
-    register: "ਨਵਾਂ ਕਿਸਾਨ",
-    phone: "ਮੋਬਾਈਲ ਨੰਬਰ",
-    phonePh: "10 ਅੰਕਾਂ ਦਾ ਮੋਬਾਈਲ ਨੰਬਰ",
-    sendOtp: "OTP ਭੇਜੋ",
-    otp: "6 ਅੰਕਾਂ ਦਾ ਕੋਡ ਭਰੋ",
-    otpSent: "ਕੋਡ ਭੇਜਿਆ ਗਿਆ",
-    verify: "ਤਸਦੀਕ ਕਰੋ",
-    resend: "ਕੋਡ ਦੁਬਾਰਾ ਭੇਜੋ",
-    name: "ਪੂਰਾ ਨਾਮ",
-    namePh: "ਜਿਵੇਂ ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ",
-    village: "ਪਿੰਡ / ਸ਼ਹਿਰ",
-    villagePh: "ਜਿਵੇਂ ਭੁੱਚੋ ਮੰਡੀ, ਬਠਿੰਡਾ",
-    acreage: "ਖੇਤ ਦਾ ਆਕਾਰ (ਏਕੜ)",
-    acreagePh: "ਜਿਵੇਂ 12",
-    crop: "ਇਸ ਸੀਜ਼ਨ ਦੀ ਮੁੱਖ ਫਸਲ",
-    createAccount: "ਖਾਤਾ ਬਣਾਓ",
-    haveAccount: "ਪਹਿਲਾਂ ਰਜਿਸਟਰ ਹੋ? ਲਾਗਇਨ ਕਰੋ",
-    newHere: "ਨਵੇਂ ਹੋ? ਰਜਿਸਟਰ ਕਰੋ",
-    crops: ["ਝੋਨਾ (ਚਾਵਲ)", "ਕਣਕ", "ਕਪਾਹ", "ਹੋਰ"],
-    errPhone: "ਸਹੀ 10 ਅੰਕਾਂ ਦਾ ਨੰਬਰ ਭਰੋ",
-    errOtp: "6 ਅੰਕਾਂ ਦਾ ਕੋਡ ਭਰੋ",
-    errName: "ਆਪਣਾ ਨਾਮ ਭਰੋ",
-    errVillage: "ਆਪਣਾ ਪਿੰਡ ਜਾਂ ਸ਼ਹਿਰ ਭਰੋ",
-    errAcre: "ਖੇਤ ਦਾ ਆਕਾਰ ਏਕੜ ਵਿੱਚ ਭਰੋ",
-  },
+  brand: "YC Agro",
+  tagline: "Satellite eyes on your field. Spray only where it's needed.",
+  login: "Log in",
+  register: "New farmer",
+  phone: "Mobile number",
+  phonePh: "Mobile number",
+  sendOtp: "Send OTP",
+  otp: "Enter the 6-digit code",
+  otpSent: "Code sent to",
+  verify: "Verify and continue",
+  resend: "Send code again",
+  name: "Full name",
+  namePh: "e.g. John Carter",
+  village: "City / town",
+  villagePh: "e.g. Fresno, CA",
+  acreage: "Field size (acres)",
+  acreagePh: "e.g. 12",
+  crop: "Main crop this season",
+  createAccount: "Create account",
+  haveAccount: "Already registered? Log in",
+  newHere: "New to YC Agro? Register",
+  crops: ["Paddy (rice)", "Wheat", "Cotton", "Other"],
+  errPhone: "Enter a valid mobile number",
+  errOtp: "Enter the 6-digit code",
+  errName: "Enter your name",
+  errVillage: "Enter your city or town",
+  errAcre: "Enter your field size in acres",
 };
+
+// Country codes — extend this list as you onboard more regions
+const COUNTRIES = [
+  { name: "United States", dial: "+1", iso: "US", minLen: 10, maxLen: 10 },
+  { name: "United Kingdom", dial: "+44", iso: "GB", minLen: 10, maxLen: 10 },
+  { name: "Canada", dial: "+1", iso: "CA", minLen: 10, maxLen: 10 },
+  { name: "Australia", dial: "+61", iso: "AU", minLen: 9, maxLen: 9 },
+  { name: "India", dial: "+91", iso: "IN", minLen: 10, maxLen: 10 },
+];
 
 // NDVI strip — the product's signature: red (stress) → green (healthy)
 const NDVI = ["#a63d2f", "#c97b3a", "#d9a441", "#9aa83f", "#5c8a3c", "#2f6b35"];
@@ -135,6 +111,17 @@ const css = {
     color: "#222",
     outline: "none",
   }),
+  select: (err) => ({
+    padding: "12px 10px",
+    fontSize: 15,
+    borderRadius: 8,
+    border: err ? "2px solid #a63d2f" : "2px solid #c9c4b4",
+    background: "#fff",
+    color: "#222",
+    outline: "none",
+    flex: "none",
+    width: 132,
+  }),
   err: { color: "#a63d2f", fontSize: 13, margin: "5px 0 0" },
   primary: {
     width: "100%",
@@ -160,15 +147,6 @@ const css = {
     cursor: "pointer",
     textDecoration: "underline",
   },
-  langBtn: (active) => ({
-    border: "none",
-    background: "transparent",
-    color: active ? "#d9a441" : "#7d8a78",
-    fontWeight: active ? 800 : 500,
-    fontSize: 13,
-    cursor: "pointer",
-    padding: "2px 6px",
-  }),
   cropRow: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 },
   chip: (active) => ({
     padding: "8px 14px",
@@ -183,9 +161,9 @@ const css = {
 };
 
 export default function AuthScreen({ onAuthed }) {
-  const [lang, setLang] = useState("pa");
   const [mode, setMode] = useState("login"); // login | register
   const [step, setStep] = useState("form"); // form | otp | done
+  const [countryIdx, setCountryIdx] = useState(0); // default United States
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [name, setName] = useState("");
@@ -193,69 +171,71 @@ export default function AuthScreen({ onAuthed }) {
   const [acreage, setAcreage] = useState("");
   const [crop, setCrop] = useState(0);
   const [errors, setErrors] = useState({});
-  const t = T[lang];
+  const t = T;
+  const country = COUNTRIES[countryIdx];
 
-  const validPhone = /^[6-9]\d{9}$/.test(phone);
+  const validPhone = phone.length >= country.minLen && phone.length <= country.maxLen;
 
   const sendOtp = async () => {
-  const e = {};
-  if (!validPhone) e.phone = t.errPhone;
-  if (mode === "register") {
-    if (!name.trim()) e.name = t.errName;
-    if (!village.trim()) e.village = t.errVillage;
-    if (!acreage || Number(acreage) <= 0) e.acreage = t.errAcre;
-  }
-  setErrors(e);
-  if (Object.keys(e).length) return;
-
-  try {
-    if (!window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "invisible",
-      });
+    const e = {};
+    if (!validPhone) e.phone = t.errPhone;
+    if (mode === "register") {
+      if (!name.trim()) e.name = t.errName;
+      if (!village.trim()) e.village = t.errVillage;
+      if (!acreage || Number(acreage) <= 0) e.acreage = t.errAcre;
     }
-    const confirmation = await signInWithPhoneNumber(
-      auth,
-      "+91" + phone,
-      window.recaptchaVerifier
-    );
-    window.confirmationResult = confirmation;
-    setStep("otp");
-  } catch (err) {
-    setErrors({ phone: "Could not send code. Try again." });
-    console.error(err);
-  }
-};
+    setErrors(e);
+    if (Object.keys(e).length) return;
+
+    try {
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+          size: "invisible",
+        });
+      }
+      const confirmation = await signInWithPhoneNumber(
+        auth,
+        country.dial + phone,
+        window.recaptchaVerifier
+      );
+      window.confirmationResult = confirmation;
+      setStep("otp");
+    } catch (err) {
+      setErrors({ phone: "Could not send code. Try again." });
+      console.error(err);
+    }
+  };
 
   const verify = async () => {
-  if (!/^\d{6}$/.test(otp)) return setErrors({ otp: t.errOtp });
-  setErrors({});
-  try {
-    const result = await window.confirmationResult.confirm(otp);
-    const token = await result.user.getIdToken();
-    if (mode === "register") {
-      await fetch("http://localhost:5000/api/farmers/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name,
-          village,
-          acreage,
-          crop: ["paddy", "wheat", "cotton", "other"][crop],
-          lang,
-        }),
-      });
+    if (!/^\d{6}$/.test(otp)) return setErrors({ otp: t.errOtp });
+    setErrors({});
+    try {
+      const result = await window.confirmationResult.confirm(otp);
+      const token = await result.user.getIdToken();
+      if (mode === "register") {
+        await fetch("http://localhost:5000/api/farmers/register", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name,
+            village,
+            acreage,
+            crop: ["paddy", "wheat", "cotton", "other"][crop],
+            lang: "en",
+          }),
+        });
+      }
+      setStep("done");
+      setTimeout(() => onAuthed && onAuthed(result.user), 1200);
+    } catch (err) {
+      setErrors({ otp: "Wrong or expired code." });
+      console.error(err);
     }
-    setStep("done");
-    setTimeout(() => onAuthed && onAuthed(result.user), 1200);
-  } catch (err) {
-    setErrors({ otp: "Wrong or expired code." });
-    console.error(err);
-  }
-};
+  };
+
   return (
     <div style={css.page}>
       <div style={css.card}>
@@ -266,14 +246,7 @@ export default function AuthScreen({ onAuthed }) {
         </div>
 
         <div style={css.head}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <h1 style={css.brand}>{t.brand}</h1>
-            <div>
-              <button style={css.langBtn(lang === "pa")} onClick={() => setLang("pa")}>ਪੰਜਾਬੀ</button>
-              <span style={{ color: "#c9c4b4" }}>|</span>
-              <button style={css.langBtn(lang === "en")} onClick={() => setLang("en")}>English</button>
-            </div>
-          </div>
+          <h1 style={css.brand}>{t.brand}</h1>
           <p style={css.tagline}>{t.tagline}</p>
         </div>
         <div id="recaptcha-container"></div>
@@ -313,9 +286,19 @@ export default function AuthScreen({ onAuthed }) {
 
               <label style={css.label}>{t.phone}</label>
               <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ ...css.input(false), width: 64, flex: "none", textAlign: "center", color: "#555" }}>+91</div>
+                <select
+                  style={css.select(false)}
+                  value={countryIdx}
+                  onChange={(e) => setCountryIdx(Number(e.target.value))}
+                >
+                  {COUNTRIES.map((c, i) => (
+                    <option key={c.iso} value={i}>
+                      {c.dial} {c.iso}
+                    </option>
+                  ))}
+                </select>
                 <input style={css.input(errors.phone)} value={phone} placeholder={t.phonePh}
-                  inputMode="numeric" maxLength={10}
+                  inputMode="numeric" maxLength={country.maxLen}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} />
               </div>
               {errors.phone && <p style={css.err}>{errors.phone}</p>}
@@ -330,7 +313,7 @@ export default function AuthScreen({ onAuthed }) {
           {step === "otp" && (
             <>
               <p style={{ fontSize: 15, color: "#3a4435" }}>
-                {t.otpSent} <b>+91 {phone}</b>
+                {t.otpSent} <b>{country.dial} {phone}</b>
               </p>
               <label style={css.label}>{t.otp}</label>
               <input style={{ ...css.input(errors.otp), letterSpacing: 8, textAlign: "center", fontSize: 24 }}
@@ -346,10 +329,10 @@ export default function AuthScreen({ onAuthed }) {
             <div style={{ textAlign: "center", padding: "30px 0" }}>
               <div style={{ fontSize: 48 }}>🌾</div>
               <h2 style={{ color: "#1e4d2b", margin: "10px 0 4px" }}>
-                {mode === "register" ? (lang === "pa" ? "ਖਾਤਾ ਬਣ ਗਿਆ!" : "Account created!") : (lang === "pa" ? "ਜੀ ਆਇਆਂ ਨੂੰ!" : "Welcome back!")}
+                {mode === "register" ? "Account created!" : "Welcome back!"}
               </h2>
               <p style={{ color: "#5a6354", fontSize: 14 }}>
-                {lang === "pa" ? "ਡੈਸ਼ਬੋਰਡ ਖੁੱਲ੍ਹ ਰਿਹਾ ਹੈ…" : "Loading your field dashboard…"}
+                Loading your field dashboard…
               </p>
             </div>
           )}

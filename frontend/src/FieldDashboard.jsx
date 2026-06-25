@@ -43,13 +43,7 @@ const T = {
   },
 };
 
-// Mock scan result — replace with GET /api/farmers/me/scan from the pipeline
-const MOCK_SCAN = {
-  date: "2026-05-26",
-  stressedPct: 1.7,
-  healthyPct: 94.3,
-  ndviUrl: null, // when pipeline produces the PNG, put its URL here
-};
+
 
 const C = {
   bg: "#10271a",
@@ -69,9 +63,43 @@ export default function FieldDashboard({ user }) {
   const [hasField, setHasField] = useState(true);
   const [acres, setAcres] = useState(0);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
-  const scan = MOCK_SCAN;
-  const healthy = scan.stressedPct < 5;
+  const [scan, setScan] = useState(null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const healthy = scan ? scan.stressedPct < 5 : false;
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("http://localhost:5000/api/farmers/me/scan", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        setScan(data.scan);
+      } catch (err) {
+        console.error("Failed to load scan:", err);
+      }
+    })();
+  }, [user]);
+
+  const requestScan = async () => {
+    setScanLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("http://localhost:5000/api/farmers/me/scan", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Scan failed");
+      setScan(data.scan);
+    } catch (err) {
+      console.error(err);
+      alert(err.message);
+    } finally {
+      setScanLoading(false);
+    }
+  };
   // Load Leaflet + leaflet-draw from CDN, then init the map once
   useEffect(() => {
     let cancelled = false;
@@ -176,42 +204,42 @@ export default function FieldDashboard({ user }) {
   }
 
   function layerToGeoJSON(layer) {
-  const latlngs = layer.getLatLngs()[0]; // array of {lat, lng}
-  const coords = latlngs.map((p) => [p.lng, p.lat]); // GeoJSON is [lng, lat]
-  // close the ring — first point repeated as last
-  const first = coords[0];
-  const last = coords[coords.length - 1];
-  if (first[0] !== last[0] || first[1] !== last[1]) {
-    coords.push(first);
-  }
-  return { type: "Polygon", coordinates: [coords] };
-}
-
-const saveField = async () => {
-  if (!layerRef.current) return;
-  setSaveState("saving");
-  try {
-    const polygon = layerToGeoJSON(layerRef.current);
-    const token = await user.getIdToken();
-    const res = await fetch("http://localhost:5000/api/farmers/me/field", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ polygon }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Save failed: ${res.status}`);
+    const latlngs = layer.getLatLngs()[0]; // array of {lat, lng}
+    const coords = latlngs.map((p) => [p.lng, p.lat]); // GeoJSON is [lng, lat]
+    // close the ring — first point repeated as last
+    const first = coords[0];
+    const last = coords[coords.length - 1];
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      coords.push(first);
     }
-    setSaveState("saved");
-  } catch (err) {
-    console.error(err);
-    setSaveState("idle");
-    alert("Couldn't save field — check the server is running.");
+    return { type: "Polygon", coordinates: [coords] };
   }
-};
+
+  const saveField = async () => {
+    if (!layerRef.current) return;
+    setSaveState("saving");
+    try {
+      const polygon = layerToGeoJSON(layerRef.current);
+      const token = await user.getIdToken();
+      const res = await fetch("http://localhost:5000/api/farmers/me/field", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ polygon }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Save failed: ${res.status}`);
+      }
+      setSaveState("saved");
+    } catch (err) {
+      console.error(err);
+      setSaveState("idle");
+      alert("Couldn't save field — check the server is running.");
+    }
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
@@ -252,11 +280,21 @@ const saveField = async () => {
                 {healthy ? t.healthy : t.stressed}
               </b>
             </div>
-            <Row label={t.lastScan} value={scan.date} />
-            <Bar healthy={scan.healthyPct} stressed={scan.stressedPct} />
-            <Legend t={t} />
-            <button style={{ ...primaryBtn, background: C.green, color: C.card, marginTop: 14 }}>
-              {t.scanNow}
+            {scan ? (
+              <>
+                <Row label={t.lastScan} value={scan.date} />
+                <Bar healthy={scan.healthyPct} stressed={scan.stressedPct} />
+                <Legend t={t} />
+              </>
+            ) : (
+              <p style={{ fontSize: 13, color: C.muted }}>No scan yet — request one below.</p>
+            )}
+            <button
+              style={{ ...primaryBtn, background: C.green, color: C.card, marginTop: 14, opacity: scanLoading ? 0.7 : 1 }}
+              disabled={scanLoading}
+              onClick={requestScan}
+            >
+              {scanLoading ? "Scanning…" : t.scanNow}
             </button>
           </Panel>
         </aside>
