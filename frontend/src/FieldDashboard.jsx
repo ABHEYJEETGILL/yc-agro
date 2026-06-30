@@ -55,6 +55,26 @@ const C = {
   muted: "#5a6354",
 };
 
+// Accepts either standard GeoJSON ({coordinates:[[lng,lat],...]})
+// or the Firestore-safe shape ({coordinates:[{lng,lat},...]}) and
+// returns Leaflet-style [lat,lng] pairs, ring-closing point dropped.
+function fieldToLatLngs(field) {
+  if (!field || !field.coordinates) return null;
+  let ring = field.coordinates[0] ?? field.coordinates; // handle [ [..] ] vs [..]
+  if (!Array.isArray(ring) || ring.length < 3) return null;
+
+  const points = ring.map((pt) =>
+    Array.isArray(pt) ? [pt[1], pt[0]] : [pt.lat, pt.lng] // [lng,lat] vs {lng,lat}
+  );
+  // drop closing duplicate point if present
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (first[0] === last[0] && first[1] === last[1] && points.length > 3) {
+    points.pop();
+  }
+  return points;
+}
+
 export default function FieldDashboard({ user }) {
   const t = T.en;
   const mapRef = useRef(null);
@@ -65,8 +85,28 @@ export default function FieldDashboard({ user }) {
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
   const [scan, setScan] = useState(null);
   const [scanLoading, setScanLoading] = useState(false);
+  const [savedField, setSavedField] = useState(null);
+  const [fieldLoaded, setFieldLoaded] = useState(false);
   const healthy = scan ? scan.stressedPct < 5 : false;
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("http://localhost:5000/api/farmers/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        setSavedField(data.farmer?.field || null);
+      } catch (err) {
+        console.error("Failed to load saved field:", err);
+      } finally {
+        setFieldLoaded(true);
+      }
+    })();
+  }, [user]);
+
+    // Fetch latest scan
   useEffect(() => {
     (async () => {
       try {
@@ -100,7 +140,8 @@ export default function FieldDashboard({ user }) {
       setScanLoading(false);
     }
   };
-  // Load Leaflet + leaflet-draw from CDN, then init the map once
+
+  // Load Leaflet + leaflet-draw from CDN, then init the map once we know the saved field
   useEffect(() => {
     let cancelled = false;
     function add(tag, attrs) {
@@ -126,13 +167,15 @@ export default function FieldDashboard({ user }) {
           src: "https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js",
         });
       }
-      if (cancelled || mapObj.current) return;
+      if (cancelled || mapObj.current || !fieldLoaded) return;
+      console.log("savedField from backend:", savedField);
+      console.log("converted latlngs:", fieldToLatLngs(savedField));
       initMap();
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fieldLoaded]);
 
   function shoelaceAcres(latlngs) {
     // Approx area via planar shoelace on lat/lng → m² → acres.
@@ -170,8 +213,10 @@ export default function FieldDashboard({ user }) {
     const drawn = new L.FeatureGroup();
     map.addLayer(drawn);
 
+    const initialLatLngs = fieldToLatLngs(savedField) || DEFAULT_POLY;
+
     // Seed with the known field polygon
-    const poly = L.polygon(DEFAULT_POLY, { color: C.gold, weight: 3, fillOpacity: 0.15 });
+    const poly = L.polygon(initialLatLngs, { color: C.gold, weight: 3, fillOpacity: 0.15 });
     drawn.addLayer(poly);
     layerRef.current = poly;
     recalc(poly);

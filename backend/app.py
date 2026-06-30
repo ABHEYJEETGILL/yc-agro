@@ -13,6 +13,8 @@ from PIL import Image
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 
+import traceback
+
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 
@@ -28,6 +30,20 @@ app = Flask(__name__)
 CORS(app, origins=os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(","))
 
 VALID_CROPS = {"paddy", "wheat", "cotton", "other"}
+
+def to_firestore_safe(poly):
+    """Firestore disallows nested arrays — convert each [lng,lat] pair to a map."""
+    coords = poly["coordinates"][0]
+    safe_coords = [{"lng": pt[0], "lat": pt[1]} for pt in coords]
+    return {"type": poly["type"], "coordinates": safe_coords}
+
+
+def from_firestore_safe(stored):
+    """Reverse of the above — back to standard GeoJSON for the frontend/pipeline."""
+    if not stored:
+        return None
+    coords = [[pt["lng"], pt["lat"]] for pt in stored["coordinates"]]
+    return {"type": stored["type"], "coordinates": [coords]}
 
 # ── Earth Engine init (service account, not interactive) ────
 EE_CRED_PATH = os.environ.get("EE_CRED", "gee-service-account.json")
@@ -115,9 +131,11 @@ def get_me():
     if not snap.exists:
         return jsonify(error="Not registered"), 404
     d = snap.to_dict()
+    if d.get("created_at"):
+        d["created_at"] = d["created_at"].isoformat()
     if d.get("field"):
         d["field"] = from_firestore_safe(d["field"])
-    
+    return jsonify(farmer=d)
 
 
 @app.put("/api/farmers/me/field")
@@ -139,20 +157,6 @@ def save_field():
     doc_ref = db.collection("farmers").document(g.uid)
     if not doc_ref.get().exists:
         return jsonify(error="Not registered"), 404
-    
-    def to_firestore_safe(poly):
-    #Firestore disallows nested arrays — convert each [lng,lat] pair to a map."""
-        coords = poly["coordinates"][0]
-        safe_coords = [{"lng": pt[0], "lat": pt[1]} for pt in coords]
-        return {"type": poly["type"], "coordinates": safe_coords}
-
-
-    def from_firestore_safe(stored):
-    #Reverse of the above — back to standard GeoJSON for the frontend."""
-        if not stored:
-            return None
-        coords = [[pt["lng"], pt["lat"]] for pt in stored["coordinates"]]
-        return {"type": stored["type"], "coordinates": [coords]}
     
     doc_ref.update({"field": to_firestore_safe(poly), "field_updated_at": datetime.now(timezone.utc)})
     return jsonify(ok=True)
@@ -183,13 +187,16 @@ def run_scan_pipeline(polygon_geojson):
         .sort("CLOUDY_PIXEL_PERCENTAGE")
         .first()
     )
-
+    scene_date = s2.date().format("YYYY-MM-dd").getInfo()
+    cloud_pct = s2.get("CLOUDY_PIXEL_PERCENTAGE").getInfo()
+    print(f"[scan debug] scene date={scene_date} cloud%={cloud_pct}")
+    
     red_raw = band_to_numpy(s2, "B4", region)
     nir_raw = band_to_numpy(s2, "B8", region)
     red = red_raw[red_raw.dtype.names[0]].astype(float)
     nir = nir_raw[nir_raw.dtype.names[0]].astype(float)
     ndvi = (nir - red) / (nir + red + 1e-8)
-
+    
     total = ndvi.size
     stressed_pct = float(100 * (ndvi < 0.3).mean())
     healthy_pct = float(100 * (ndvi >= 0.5).mean())
@@ -238,14 +245,15 @@ def trigger_scan():
     if not snap.exists:
         return jsonify(error="Not registered"), 404
     farmer = snap.to_dict()
-    field = farmer.get("field")
-    if not field:
+    stored_field = farmer.get("field")
+    if not stored_field:
         return jsonify(error="Draw and save your field boundary first"), 400
+    field = from_firestore_safe(stored_field)
 
     try:
         scan_result = run_scan_pipeline(field)
     except Exception as err:
-        print("Scan pipeline failed:", err)
+        traceback.print_exc()
         return jsonify(error="Scan failed — try again in a moment"), 500
 
     doc_ref.update({
