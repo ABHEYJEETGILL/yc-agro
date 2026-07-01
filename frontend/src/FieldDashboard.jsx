@@ -93,7 +93,7 @@ export default function FieldDashboard({ user }) {
     (async () => {
       try {
         const token = await user.getIdToken();
-        const res = await fetch("http://localhost:5000/api/farmers/me", {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/farmers/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
@@ -111,7 +111,7 @@ export default function FieldDashboard({ user }) {
     (async () => {
       try {
         const token = await user.getIdToken();
-        const res = await fetch("http://localhost:5000/api/farmers/me/scan", {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/farmers/me/scan`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
@@ -168,8 +168,6 @@ export default function FieldDashboard({ user }) {
         });
       }
       if (cancelled || mapObj.current || !fieldLoaded) return;
-      console.log("savedField from backend:", savedField);
-      console.log("converted latlngs:", fieldToLatLngs(savedField));
       initMap();
     })();
     return () => {
@@ -266,7 +264,7 @@ export default function FieldDashboard({ user }) {
     try {
       const polygon = layerToGeoJSON(layerRef.current);
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5000/api/farmers/me/field", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/farmers/me/field`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

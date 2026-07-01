@@ -213,7 +213,7 @@ export default function AuthScreen({ onAuthed }) {
       const result = await window.confirmationResult.confirm(otp);
       const token = await result.user.getIdToken();
       if (mode === "register") {
-        await fetch("http://localhost:5000/api/farmers/register", {
+        await fetch(`${import.meta.env.VITE_API_URL}/api/farmers/register`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
