@@ -189,7 +189,7 @@ def run_scan_pipeline(polygon_geojson):
     )
     scene_date = s2.date().format("YYYY-MM-dd").getInfo()
     cloud_pct = s2.get("CLOUDY_PIXEL_PERCENTAGE").getInfo()
-    print(f"[scan debug] scene date={scene_date} cloud%={cloud_pct}")
+    
     
     red_raw = band_to_numpy(s2, "B4", region)
     nir_raw = band_to_numpy(s2, "B8", region)

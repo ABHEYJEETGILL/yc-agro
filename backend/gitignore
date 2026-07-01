@@ -1,5 +1,8 @@
 serviceAccountKey.json
 gee-service-account.json
 ycagro_v3_best_91.pt
+*.pt
 __pycache__/
+*.pyc
+anomaly_crop.jpg
 .env

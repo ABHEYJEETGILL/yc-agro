@@ -330,6 +330,7 @@ export default function FieldDashboard({ user }) {
                 <Row label={t.lastScan} value={scan.date} />
                 <Bar healthy={scan.healthyPct} stressed={scan.stressedPct} />
                 <Legend t={t} />
+                <Detections detections={scan.detections} />
               </>
             ) : (
               <p style={{ fontSize: 13, color: C.muted }}>No scan yet — request one below.</p>
@@ -390,6 +391,69 @@ function Legend({ t }) {
     </div>
   );
 }
+
+function Detections({ detections }) {
+  if (!detections || detections.length === 0) return null;
+
+  const SEVERITY = {
+    "blast": C.rust,
+    "sheath-blight": C.rust,
+    "bacterial-blight": C.rust,
+    "tungro": C.rust,
+    "bacterial-leaf-streak": "#c97b3a",
+    "brown-spot": "#c97b3a",
+    "dead-heart": "#c97b3a",
+    "downy-mildew": C.gold,
+    "false-smut": C.gold,
+    "normal": "#2f6b35",
+  };
+
+  const LABEL = {
+    "bacterial-blight": "Bacterial Blight",
+    "bacterial-leaf-streak": "Bacterial Leaf Streak",
+    "blast": "Blast",
+    "brown-spot": "Brown Spot",
+    "dead-heart": "Dead Heart",
+    "downy-mildew": "Downy Mildew",
+    "false-smut": "False Smut",
+    "normal": "Normal",
+    "sheath-blight": "Sheath Blight",
+    "tungro": "Tungro",
+  };
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <p style={{ fontSize: 12, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.04em", margin: "0 0 6px" }}>
+        Detected Issues
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {detections.map((d, i) => (
+          <div key={i} style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            background: "#f0ece2",
+            borderRadius: 8,
+            padding: "8px 10px",
+            borderLeft: `4px solid ${SEVERITY[d.label] || C.gold}`,
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>
+              {LABEL[d.label] || d.label}
+            </span>
+            <span style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: SEVERITY[d.label] || C.gold,
+            }}>
+              {Math.round(d.confidence * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 const primaryBtn = {
   width: "100%",

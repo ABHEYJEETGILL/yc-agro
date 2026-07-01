@@ -1,4 +1,9 @@
 flask
 flask-cors
 firebase-admin
-pip install earthengine-api ultralytics pillow
+earthengine-api
+ultralytics
+pillow
+numpy
+requests
+gunicorn
