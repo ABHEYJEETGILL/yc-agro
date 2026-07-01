@@ -1,0 +1,6 @@
+firebase-admin
+earthengine-api
+ultralytics
+pillow
+numpy
+requests

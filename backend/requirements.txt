@@ -1,9 +1,4 @@
 flask
 flask-cors
 firebase-admin
-earthengine-api
-ultralytics
-pillow
-numpy
-requests
 gunicorn
