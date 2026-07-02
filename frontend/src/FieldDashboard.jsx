@@ -39,7 +39,7 @@ const T = {
     noField: "Draw your field on the map to start monitoring.",
     legend: { healthy: "Healthy", moderate: "Some stress", stressed: "Stressed crop" },
     acres: "acres",
-    scanNow: "Request scan",
+    scanNow: "Refresh scan",
   },
 };
 
@@ -106,7 +106,7 @@ export default function FieldDashboard({ user }) {
     })();
   }, [user]);
 
-    // Fetch latest scan
+  // Fetch latest scan
   useEffect(() => {
     (async () => {
       try {
@@ -122,16 +122,15 @@ export default function FieldDashboard({ user }) {
     })();
   }, [user]);
 
-  const requestScan = async () => {
+  const refreshScan = async () => {
     setScanLoading(true);
     try {
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5000/api/farmers/me/scan", {
-        method: "POST",
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/farmers/me/scan`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Scan failed");
+      if (!res.ok) throw new Error(data.error || "Couldn't refresh");
       setScan(data.scan);
     } catch (err) {
       console.error(err);
@@ -336,9 +335,9 @@ export default function FieldDashboard({ user }) {
             <button
               style={{ ...primaryBtn, background: C.green, color: C.card, marginTop: 14, opacity: scanLoading ? 0.7 : 1 }}
               disabled={scanLoading}
-              onClick={requestScan}
+              onClick={refreshScan}
             >
-              {scanLoading ? "Scanning…" : t.scanNow}
+              {scanLoading ? "Refreshing…" : t.scanNow}
             </button>
           </Panel>
         </aside>
