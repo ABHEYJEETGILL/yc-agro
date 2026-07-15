@@ -3,6 +3,9 @@ YC Agro — Flask backend (main API)
 Scan pipeline runs separately in backend-scan/scan.py (heavy ML deps).
 This service stays lightweight for Render's free tier.
 """
+import google.auth.transport.requests
+from google.oauth2 import service_account
+import requests as http_requests
 
 import os
 from datetime import datetime, timezone
@@ -39,6 +42,21 @@ def from_firestore_safe(stored):
     coords = [[pt["lng"], pt["lat"]] for pt in stored["coordinates"]]
     return {"type": stored["type"], "coordinates": [coords]}
 
+
+# ── Cloud Run scan service ──────────────────────────────────
+SCAN_SERVICE_URL = os.environ.get(
+    "SCAN_SERVICE_URL", "https://yc-agro-scan-642921605017.us-central1.run.app"
+)
+INVOKER_CRED = os.environ.get("INVOKER_CRED", "render-invoker-key.json")
+
+
+def get_scan_service_token():
+    """Mint an OIDC token to authenticate against the private Cloud Run service."""
+    creds = service_account.IDTokenCredentials.from_service_account_file(
+        INVOKER_CRED, target_audience=SCAN_SERVICE_URL
+    )
+    creds.refresh(google.auth.transport.requests.Request())
+    return creds.token
 
 # ── Auth decorator ───────────────────────────────────────────
 def require_auth(fn):
@@ -159,5 +177,38 @@ def get_scan():
     return jsonify(scan=scan)
 
 
+@app.post("/api/farmers/me/scan")
+@require_auth
+def trigger_scan():
+    """Kick off a scan on Cloud Run. Returns immediatelyy (fire-and-forget)."""
+    doc_ref = db.collection("farmers").document(g.uid)
+    snap = doc_ref.get()
+    if not snap.exists:
+        return jsonify(error="Not registered"), 404
+    if not snap.to_dict().get("field"):
+        return jsonify(error="Draw and save your field boundary first"), 400
+
+    try:
+        token = get_scan_service_token()
+        # short timeout - we don't wait for the scan, just for it to be accepted
+        http_requests.post(
+            f"{SCAN_SERVICE_URL}/scan",
+            json={"uid": g.uid},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+    except http_requests.exceptions.ReadTimeout:
+        # expected - Cloud Run is still working, that's fine
+        pass
+    except Exception as err:
+        print("Failed to trigger scan:", err)
+        return jsonify(error="Couldn't start scan"), 500
+    
+    
+    doc_ref.update({"scan_status": "running"})
+    return jsonify(status="started"), 202
+
+
+    
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

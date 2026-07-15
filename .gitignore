@@ -5,3 +5,4 @@ serviceAccountKey.json
 *.pt
 .DS_Store
 dist/
+render-invoker-key.json
