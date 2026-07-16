@@ -126,9 +126,9 @@ export default function FieldDashboard({ user }) {
     setScanLoading(true);
     try {
       const token = await user.getIdToken();
-      const res = await fetch('${import.meta.env.VITE_API_URL}/api/farmers/me/scan', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/farmers/me/scan`, {
         method: "POST",
-        headers: { Authorization: 'Bearer ${token}' },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
