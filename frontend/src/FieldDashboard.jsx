@@ -39,7 +39,7 @@ const T = {
     noField: "Draw your field on the map to start monitoring.",
     legend: { healthy: "Healthy", moderate: "Some stress", stressed: "Stressed crop" },
     acres: "acres",
-    scanNow: "Refresh scan",
+    scanNow: "Request scan",
   },
 };
 
@@ -122,23 +122,62 @@ export default function FieldDashboard({ user }) {
     })();
   }, [user]);
 
-  const refreshScan = async () => {
+  const triggerScan = async () => {
     setScanLoading(true);
     try {
       const token = await user.getIdToken();
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/farmers/me/scan`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch('${import.meta.env.VITE_API_URL}/api/farmers/me/scan', {
+        method: "POST",
+        headers: { Authorization: 'Bearer ${token}' },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Couldn't refresh");
-      setScan(data.scan);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Couldn't start scan");
+      }
+
+      pollForScan();
     } catch (err) {
       console.error(err);
       alert(err.message);
-    } finally {
       setScanLoading(false);
     }
   };
+
+  const pollForScan = async () => {
+  const started = Date.now();
+  const poll = async () => {
+    // give up after 3 minutes
+    if (Date.now() - started > 180000) {
+      setScanLoading(false);
+      alert("Scan is taking longer than expected — try refreshing in a moment.");
+      return;
+    }
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/farmers/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      const status = data.farmer?.scan_status;
+      if (status === "done") {
+        setScan(data.farmer.last_scan);
+        setScanLoading(false);
+        return;
+      }
+      if (status === "error" || status === "no_field") {
+        setScanLoading(false);
+        alert("Scan failed — please try again.");
+        return;
+      }
+      // still running — poll again in 5s
+      setTimeout(poll, 5000);
+    } catch (err) {
+      console.error(err);
+      setScanLoading(false);
+    }
+  };
+  poll();
+};
 
   // Load Leaflet + leaflet-draw from CDN, then init the map once we know the saved field
   useEffect(() => {
@@ -335,9 +374,9 @@ export default function FieldDashboard({ user }) {
             <button
               style={{ ...primaryBtn, background: C.green, color: C.card, marginTop: 14, opacity: scanLoading ? 0.7 : 1 }}
               disabled={scanLoading}
-              onClick={refreshScan}
+              onClick={triggerScan}
             >
-              {scanLoading ? "Refreshing…" : t.scanNow}
+              {scanLoading ? "Scanning…" : t.scanNow}
             </button>
           </Panel>
         </aside>
