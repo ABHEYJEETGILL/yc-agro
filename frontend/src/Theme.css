@@ -1,0 +1,162 @@
+/* ============================================================
+   YC Agro — theme tokens
+   Neutral chrome; saturation is reserved for the data layer so
+   satellite imagery and NDVI values carry the only strong color.
+
+   Usage:
+     import "./theme.css";           // in main.jsx
+     <html data-theme="dark">        // or "light"; omit to follow OS
+
+   Every surface/text/border value flips on data-theme. Data-layer
+   colors (--ndvi-*, --sev-*) are tuned per mode for contrast but
+   keep the same hue so the legend reads identically in both.
+   ============================================================ */
+
+:root {
+  --surface-0: #f7f7f5;
+  --surface-1: #ffffff;
+  --surface-2: #ffffff;
+  --surface-sunken: #efeeeb;
+
+  --text-primary: #1a1a18;
+  --text-secondary: #5c5c56;
+  --text-muted: #8a8a82;
+
+  --border: rgba(0, 0, 0, 0.10);
+  --border-strong: rgba(0, 0, 0, 0.18);
+
+  --accent: #2f6b35;
+  --accent-hover: #275a2c;
+  --accent-text: #ffffff;
+  --accent-bg: #eaf2ea;
+
+  --ndvi-healthy: #3d8b40;
+  --ndvi-moderate: #c98a1f;
+  --ndvi-stressed: #b04a2f;
+
+  --sev-high: #b04a2f;
+  --sev-med: #c98a1f;
+  --sev-low: #6b7280;
+
+  --warn-bg: #fdf4e3;
+  --warn-border: #e0b96a;
+  --warn-text: #7a5410;
+
+  --map-frame: #d8d8d4;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04);
+
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+:root[data-theme="dark"] {
+  --surface-0: #131413;
+  --surface-1: #1c1e1c;
+  --surface-2: #232624;
+  --surface-sunken: #101110;
+
+  --text-primary: #ececeb;
+  --text-secondary: #a8a8a2;
+  --text-muted: #77776f;
+
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --accent: #5aa860;
+  --accent-hover: #6cb872;
+  --accent-text: #0d140d;
+  --accent-bg: #1b2a1c;
+
+  --ndvi-healthy: #5aa860;
+  --ndvi-moderate: #d9a441;
+  --ndvi-stressed: #d4674a;
+
+  --sev-high: #d4674a;
+  --sev-med: #d9a441;
+  --sev-low: #8b8f95;
+
+  --warn-bg: #2a2113;
+  --warn-border: #6b5220;
+  --warn-text: #e0b96a;
+
+  --map-frame: #2a2d2a;
+
+  --shadow-card: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --surface-0: #131413;
+    --surface-1: #1c1e1c;
+    --surface-2: #232624;
+    --surface-sunken: #101110;
+
+    --text-primary: #ececeb;
+    --text-secondary: #a8a8a2;
+    --text-muted: #77776f;
+
+    --border: rgba(255, 255, 255, 0.10);
+    --border-strong: rgba(255, 255, 255, 0.18);
+
+    --accent: #5aa860;
+    --accent-hover: #6cb872;
+    --accent-text: #0d140d;
+    --accent-bg: #1b2a1c;
+
+    --ndvi-healthy: #5aa860;
+    --ndvi-moderate: #d9a441;
+    --ndvi-stressed: #d4674a;
+
+    --sev-high: #d4674a;
+    --sev-med: #d9a441;
+    --sev-low: #8b8f95;
+
+    --warn-bg: #2a2113;
+    --warn-border: #6b5220;
+    --warn-text: #e0b96a;
+
+    --map-frame: #2a2d2a;
+
+    --shadow-card: none;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+button:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Leaflet's own chrome is light by default; align it to the tokens
+   so the dark theme doesn't leave white control boxes on the map. */
+.leaflet-control-zoom a,
+.leaflet-draw-toolbar a {
+  background-color: var(--surface-1) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border) !important;
+}
+.leaflet-bar { border: 1px solid var(--border) !important; }
+.leaflet-control-attribution {
+  background: var(--surface-1) !important;
+  color: var(--text-muted) !important;
+}
+.leaflet-control-attribution a { color: var(--text-secondary) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

@@ -1,343 +1,646 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { auth } from "./firebase";
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+
 // ============================================================
-// YC Agro — Login + Farmer Registration
-// Phone-first auth. Firebase Phone Auth (signInWithPhoneNumber +
-// RecaptchaVerifier). Registration POSTs to the Flask backend:
+// YC Agro — Log in / Register
+//
+// Firebase Phone Auth (signInWithPhoneNumber + invisible
+// RecaptchaVerifier). On register, POSTs the profile to:
 //   POST /api/farmers/register
+// then hands the Firebase user up via onAuthed(result.user).
+//
+// Requires ./theme.css imported once in main.jsx.
 // ============================================================
 
-const T = {
-  brand: "YC Agro",
-  tagline: "Satellite eyes on your field. Spray only where it's needed.",
-  login: "Log in",
-  register: "New farmer",
-  phone: "Mobile number",
-  phonePh: "Mobile number",
-  sendOtp: "Send OTP",
-  otp: "Enter the 6-digit code",
-  otpSent: "Code sent to",
-  verify: "Verify and continue",
-  resend: "Send code again",
-  name: "Full name",
-  namePh: "e.g. John Carter",
-  village: "City / town",
-  villagePh: "e.g. Fresno, CA",
-  acreage: "Field size (acres)",
-  acreagePh: "e.g. 12",
-  crop: "Main crop this season",
-  createAccount: "Create account",
-  haveAccount: "Already registered? Log in",
-  newHere: "New to YC Agro? Register",
-  crops: ["Paddy (rice)", "Wheat", "Cotton", "Other"],
-  errPhone: "Enter a valid mobile number",
-  errOtp: "Enter the 6-digit code",
-  errName: "Enter your name",
-  errVillage: "Enter your city or town",
-  errAcre: "Enter your field size in acres",
-};
-
-// Country codes — extend this list as you onboard more regions
 const COUNTRIES = [
   { name: "United States", dial: "+1", iso: "US", minLen: 10, maxLen: 10 },
-  { name: "United Kingdom", dial: "+44", iso: "GB", minLen: 10, maxLen: 10 },
   { name: "Canada", dial: "+1", iso: "CA", minLen: 10, maxLen: 10 },
+  { name: "United Kingdom", dial: "+44", iso: "GB", minLen: 10, maxLen: 10 },
   { name: "Australia", dial: "+61", iso: "AU", minLen: 9, maxLen: 9 },
   { name: "India", dial: "+91", iso: "IN", minLen: 10, maxLen: 10 },
 ];
 
-// NDVI strip — the product's signature: red (stress) → green (healthy)
-const NDVI = ["#a63d2f", "#c97b3a", "#d9a441", "#9aa83f", "#5c8a3c", "#2f6b35"];
+// Single source of truth — the value is what the backend stores,
+// the label is what the grower sees. Keeping them in one object
+// means adding a crop can't desync the two.
+const CROPS = [
+  { value: "rice", label: "Rice" },
+  { value: "corn", label: "Corn" },
+  { value: "soybeans", label: "Soybeans" },
+  { value: "wheat", label: "Wheat" },
+  { value: "cotton", label: "Cotton" },
+  { value: "other", label: "Other" },
+];
 
-const css = {
-  page: {
-    minHeight: "100vh",
-    background: "#10271a",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    fontFamily: "'Segoe UI', system-ui, sans-serif",
-  },
-  card: {
-    width: "100%",
-    maxWidth: 420,
-    background: "#f7f5ef",
-    borderRadius: 14,
-    overflow: "hidden",
-    boxShadow: "0 18px 50px rgba(0,0,0,0.45)",
-  },
-  strip: { display: "flex", height: 8 },
-  head: { padding: "26px 28px 10px" },
-  brand: {
-    margin: 0,
-    fontSize: 30,
-    fontWeight: 800,
-    letterSpacing: "-0.5px",
-    color: "#1e4d2b",
-  },
-  tagline: { margin: "6px 0 0", fontSize: 14, color: "#5a6354", lineHeight: 1.45 },
-  body: { padding: "18px 28px 28px" },
-  tabs: { display: "flex", gap: 8, margin: "14px 0 20px" },
-  tab: (active) => ({
-    flex: 1,
-    padding: "10px 0",
-    borderRadius: 8,
-    border: active ? "2px solid #1e4d2b" : "2px solid #d8d4c8",
-    background: active ? "#1e4d2b" : "transparent",
-    color: active ? "#f7f5ef" : "#4a5345",
-    fontSize: 15,
-    fontWeight: 700,
-    cursor: "pointer",
-  }),
-  label: {
-    display: "block",
-    fontSize: 13,
-    fontWeight: 700,
-    color: "#3a4435",
-    margin: "14px 0 6px",
-    textTransform: "uppercase",
-    letterSpacing: "0.04em",
-  },
-  input: (err) => ({
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "12px 14px",
-    fontSize: 17,
-    borderRadius: 8,
-    border: err ? "2px solid #a63d2f" : "2px solid #c9c4b4",
-    background: "#fff",
-    color: "#222",
-    outline: "none",
-  }),
-  select: (err) => ({
-    padding: "12px 10px",
-    fontSize: 15,
-    borderRadius: 8,
-    border: err ? "2px solid #a63d2f" : "2px solid #c9c4b4",
-    background: "#fff",
-    color: "#222",
-    outline: "none",
-    flex: "none",
-    width: 132,
-  }),
-  err: { color: "#a63d2f", fontSize: 13, margin: "5px 0 0" },
-  primary: {
-    width: "100%",
-    marginTop: 22,
-    padding: "14px 0",
-    fontSize: 17,
-    fontWeight: 800,
-    borderRadius: 8,
-    border: "none",
-    background: "#d9a441",
-    color: "#2a2410",
-    cursor: "pointer",
-  },
-  ghost: {
-    width: "100%",
-    marginTop: 12,
-    padding: "8px 0",
-    fontSize: 14,
-    border: "none",
-    background: "transparent",
-    color: "#1e4d2b",
-    fontWeight: 700,
-    cursor: "pointer",
-    textDecoration: "underline",
-  },
-  cropRow: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 },
-  chip: (active) => ({
-    padding: "8px 14px",
-    borderRadius: 999,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-    border: active ? "2px solid #1e4d2b" : "2px solid #c9c4b4",
-    background: active ? "#e4ead9" : "#fff",
-    color: "#2c3527",
-  }),
-};
+const ACRES_PER_HECTARE = 2.47105;
 
 export default function AuthScreen({ onAuthed }) {
-  const [mode, setMode] = useState("login"); // login | register
-  const [step, setStep] = useState("form"); // form | otp | done
-  const [countryIdx, setCountryIdx] = useState(0); // default United States
+  const [mode, setMode] = useState("login");
+  const [step, setStep] = useState("form");
+  const [countryIdx, setCountryIdx] = useState(0);
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [name, setName] = useState("");
-  const [village, setVillage] = useState("");
-  const [acreage, setAcreage] = useState("");
-  const [crop, setCrop] = useState(0);
+  const [locality, setLocality] = useState("");
+  const [fieldSize, setFieldSize] = useState("");
+  const [units, setUnits] = useState(
+    () => localStorage.getItem("ycagro:units") || "acres"
+  );
+  const [cropValue, setCropValue] = useState("rice");
   const [errors, setErrors] = useState({});
-  const t = T;
+  const [busy, setBusy] = useState(false);
+  const [theme, setTheme] = useState(
+    () => localStorage.getItem("ycagro:theme") || "system"
+  );
+  const otpRef = useRef(null);
+
   const country = COUNTRIES[countryIdx];
+  const validPhone =
+    phone.length >= country.minLen && phone.length <= country.maxLen;
 
-  const validPhone = phone.length >= country.minLen && phone.length <= country.maxLen;
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "system") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", theme);
+    localStorage.setItem("ycagro:theme", theme);
+  }, [theme]);
 
-  const sendOtp = async () => {
+  useEffect(() => {
+    localStorage.setItem("ycagro:units", units);
+  }, [units]);
+
+  useEffect(() => {
+    if (step === "otp" && otpRef.current) otpRef.current.focus();
+  }, [step]);
+
+  function getVerifier() {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(
+        auth,
+        "recaptcha-container",
+        { size: "invisible" }
+      );
+    }
+    return window.recaptchaVerifier;
+  }
+
+  function clearVerifier() {
+    try {
+      window.recaptchaVerifier?.clear();
+    } catch {
+      /* verifier may already be torn down */
+    }
+    window.recaptchaVerifier = null;
+  }
+
+  async function requestCode() {
     const e = {};
-    if (!validPhone) e.phone = t.errPhone;
+    if (!validPhone) e.phone = "Enter a valid mobile number.";
     if (mode === "register") {
-      if (!name.trim()) e.name = t.errName;
-      if (!village.trim()) e.village = t.errVillage;
-      if (!acreage || Number(acreage) <= 0) e.acreage = t.errAcre;
+      if (!name.trim()) e.name = "Enter your name.";
+      if (!locality.trim()) e.locality = "Enter your city or town.";
+      if (!fieldSize || Number(fieldSize) <= 0)
+        e.fieldSize = "Enter your field size.";
     }
     setErrors(e);
     if (Object.keys(e).length) return;
 
+    setBusy(true);
     try {
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-          size: "invisible",
-        });
-      }
       const confirmation = await signInWithPhoneNumber(
         auth,
         country.dial + phone,
-        window.recaptchaVerifier
+        getVerifier()
       );
       window.confirmationResult = confirmation;
       setStep("otp");
     } catch (err) {
-      setErrors({ phone: "Could not send code. Try again." });
       console.error(err);
+      clearVerifier();
+      setErrors({ phone: "Couldn't send the code. Check the number and try again." });
+    } finally {
+      setBusy(false);
     }
-  };
+  }
 
-  const verify = async () => {
-    if (!/^\d{6}$/.test(otp)) return setErrors({ otp: t.errOtp });
+  async function resendCode() {
     setErrors({});
+    setOtp("");
+    setBusy(true);
+    // The previous verifier is spent — a fresh one is required or
+    // Firebase rejects the second request.
+    clearVerifier();
+    try {
+      const confirmation = await signInWithPhoneNumber(
+        auth,
+        country.dial + phone,
+        getVerifier()
+      );
+      window.confirmationResult = confirmation;
+    } catch (err) {
+      console.error(err);
+      clearVerifier();
+      setErrors({ otp: "Couldn't send a new code. Go back and try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyCode() {
+    if (!/^\d{6}$/.test(otp)) {
+      setErrors({ otp: "Enter the 6-digit code." });
+      return;
+    }
+    setErrors({});
+    setBusy(true);
     try {
       const result = await window.confirmationResult.confirm(otp);
-      const token = await result.user.getIdToken();
+
       if (mode === "register") {
-        await fetch(`${import.meta.env.VITE_API_URL}/api/farmers/register`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            name,
-            village,
-            acreage,
-            crop: ["paddy", "wheat", "cotton", "other"][crop],
-            lang: "en",
-          }),
-        });
+        const token = await result.user.getIdToken();
+        const acres =
+          units === "acres"
+            ? Number(fieldSize)
+            : Number(fieldSize) * ACRES_PER_HECTARE;
+
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/farmers/register`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name,
+              village: locality,
+              acreage: acres,
+              crop: cropValue,
+              lang: "en",
+            }),
+          }
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Couldn't create your account.");
+        }
       }
-      setStep("done");
-      setTimeout(() => onAuthed && onAuthed(result.user), 1200);
+
+      clearVerifier();
+      onAuthed?.(result.user);
     } catch (err) {
-      setErrors({ otp: "Wrong or expired code." });
       console.error(err);
+      setErrors({ otp: err.message || "That code was wrong or has expired." });
+      setBusy(false);
     }
-  };
+  }
+
+  function goBack() {
+    clearVerifier();
+    setOtp("");
+    setErrors({});
+    setStep("form");
+  }
 
   return (
-    <div style={css.page}>
-      <div style={css.card}>
-        <div style={css.strip}>
-          {NDVI.map((c) => (
-            <div key={c} style={{ flex: 1, background: c }} />
-          ))}
-        </div>
+    <div style={S.page}>
+      <div id="recaptcha-container" />
 
-        <div style={css.head}>
-          <h1 style={css.brand}>{t.brand}</h1>
-          <p style={css.tagline}>{t.tagline}</p>
-        </div>
-        <div id="recaptcha-container"></div>
-        <div style={css.body}>
-          {step === "form" && (
+      <div style={S.themeCorner}>
+        <Segmented
+          value={theme}
+          onChange={setTheme}
+          ariaLabel="Color theme"
+          options={[
+            { value: "light", label: "Light" },
+            { value: "system", label: "Auto" },
+            { value: "dark", label: "Dark" },
+          ]}
+        />
+      </div>
+
+      <div style={S.card}>
+        <header style={S.head}>
+          <div style={S.brand}>YC Agro</div>
+          <p style={S.tagline}>
+            Satellite monitoring for your fields. Find stress early, spray only
+            where it's needed.
+          </p>
+        </header>
+
+        <div style={S.body}>
+          {step === "form" ? (
             <>
-              <div style={css.tabs}>
-                <button style={css.tab(mode === "login")} onClick={() => setMode("login")}>{t.login}</button>
-                <button style={css.tab(mode === "register")} onClick={() => setMode("register")}>{t.register}</button>
+              <div style={S.tabs} role="tablist" aria-label="Log in or register">
+                {[
+                  ["login", "Log in"],
+                  ["register", "Register"],
+                ].map(([val, label]) => {
+                  const active = mode === val;
+                  return (
+                    <button
+                      key={val}
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => {
+                        setMode(val);
+                        setErrors({});
+                      }}
+                      style={{
+                        ...S.tab,
+                        background: active ? "var(--surface-2)" : "transparent",
+                        color: active ? "var(--text-primary)" : "var(--text-muted)",
+                        boxShadow: active ? "var(--shadow-card)" : "none",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
 
               {mode === "register" && (
                 <>
-                  <label style={css.label}>{t.name}</label>
-                  <input style={css.input(errors.name)} value={name} placeholder={t.namePh}
-                    onChange={(e) => setName(e.target.value)} />
-                  {errors.name && <p style={css.err}>{errors.name}</p>}
+                  <Field label="Full name" error={errors.name}>
+                    <input
+                      style={S.input(errors.name)}
+                      value={name}
+                      placeholder="John Carter"
+                      autoComplete="name"
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </Field>
 
-                  <label style={css.label}>{t.village}</label>
-                  <input style={css.input(errors.village)} value={village} placeholder={t.villagePh}
-                    onChange={(e) => setVillage(e.target.value)} />
-                  {errors.village && <p style={css.err}>{errors.village}</p>}
+                  <Field label="City or town" error={errors.locality}>
+                    <input
+                      style={S.input(errors.locality)}
+                      value={locality}
+                      placeholder="Fresno, CA"
+                      autoComplete="address-level2"
+                      onChange={(e) => setLocality(e.target.value)}
+                    />
+                  </Field>
 
-                  <label style={css.label}>{t.acreage}</label>
-                  <input style={css.input(errors.acreage)} value={acreage} placeholder={t.acreagePh}
-                    inputMode="numeric" onChange={(e) => setAcreage(e.target.value.replace(/[^\d.]/g, ""))} />
-                  {errors.acreage && <p style={css.err}>{errors.acreage}</p>}
+                  <Field label="Field size" error={errors.fieldSize}>
+                    <div style={S.row}>
+                      <input
+                        style={{ ...S.input(errors.fieldSize), flex: 1 }}
+                        value={fieldSize}
+                        placeholder="120"
+                        inputMode="decimal"
+                        onChange={(e) =>
+                          setFieldSize(e.target.value.replace(/[^\d.]/g, ""))
+                        }
+                      />
+                      <Segmented
+                        value={units}
+                        onChange={setUnits}
+                        ariaLabel="Area units"
+                        options={[
+                          { value: "acres", label: "ac" },
+                          { value: "hectares", label: "ha" },
+                        ]}
+                      />
+                    </div>
+                  </Field>
 
-                  <label style={css.label}>{t.crop}</label>
-                  <div style={css.cropRow}>
-                    {t.crops.map((c, i) => (
-                      <button key={c} style={css.chip(crop === i)} onClick={() => setCrop(i)}>{c}</button>
-                    ))}
-                  </div>
+                  <Field label="Main crop this season">
+                    <div style={S.chipRow}>
+                      {CROPS.map((c) => {
+                        const active = cropValue === c.value;
+                        return (
+                          <button
+                            key={c.value}
+                            aria-pressed={active}
+                            onClick={() => setCropValue(c.value)}
+                            style={{
+                              ...S.chip,
+                              borderColor: active
+                                ? "var(--accent)"
+                                : "var(--border-strong)",
+                              background: active
+                                ? "var(--accent-bg)"
+                                : "transparent",
+                              color: active
+                                ? "var(--accent)"
+                                : "var(--text-secondary)",
+                            }}
+                          >
+                            {c.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
                 </>
               )}
 
-              <label style={css.label}>{t.phone}</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <select
-                  style={css.select(false)}
-                  value={countryIdx}
-                  onChange={(e) => setCountryIdx(Number(e.target.value))}
-                >
-                  {COUNTRIES.map((c, i) => (
-                    <option key={c.iso} value={i}>
-                      {c.dial} {c.iso}
-                    </option>
-                  ))}
-                </select>
-                <input style={css.input(errors.phone)} value={phone} placeholder={t.phonePh}
-                  inputMode="numeric" maxLength={country.maxLen}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} />
-              </div>
-              {errors.phone && <p style={css.err}>{errors.phone}</p>}
+              <Field label="Mobile number" error={errors.phone}>
+                <div style={S.row}>
+                  <select
+                    style={S.select}
+                    value={countryIdx}
+                    onChange={(e) => setCountryIdx(Number(e.target.value))}
+                    aria-label="Country code"
+                  >
+                    {COUNTRIES.map((c, i) => (
+                      <option key={c.iso} value={i}>
+                        {c.iso} {c.dial}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    style={{ ...S.input(errors.phone), flex: 1 }}
+                    value={phone}
+                    placeholder="555 018 2740"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    maxLength={country.maxLen}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+                  />
+                </div>
+              </Field>
 
-              <button style={css.primary} onClick={sendOtp}>{t.sendOtp}</button>
-              <button style={css.ghost} onClick={() => setMode(mode === "login" ? "register" : "login")}>
-                {mode === "login" ? t.newHere : t.haveAccount}
+              <button
+                style={{ ...S.primary, opacity: busy ? 0.55 : 1 }}
+                disabled={busy}
+                onClick={requestCode}
+              >
+                {busy ? "Sending…" : "Send code"}
               </button>
-            </>
-          )}
 
-          {step === "otp" && (
+              <p style={S.fineprint}>
+                We'll text you a 6-digit code. Standard message rates apply.
+              </p>
+            </>
+          ) : (
             <>
-              <p style={{ fontSize: 15, color: "#3a4435" }}>
-                {t.otpSent} <b>{country.dial} {phone}</b>
+              <p style={S.otpIntro}>
+                Code sent to{" "}
+                <span style={S.otpNumber}>
+                  {country.dial} {phone}
+                </span>
               </p>
-              <label style={css.label}>{t.otp}</label>
-              <input style={{ ...css.input(errors.otp), letterSpacing: 8, textAlign: "center", fontSize: 24 }}
-                value={otp} inputMode="numeric" maxLength={6}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} />
-              {errors.otp && <p style={css.err}>{errors.otp}</p>}
-              <button style={css.primary} onClick={verify}>{t.verify}</button>
-              <button style={css.ghost} onClick={() => setStep("form")}>{t.resend}</button>
-            </>
-          )}
 
-          {step === "done" && (
-            <div style={{ textAlign: "center", padding: "30px 0" }}>
-              <div style={{ fontSize: 48 }}>🌾</div>
-              <h2 style={{ color: "#1e4d2b", margin: "10px 0 4px" }}>
-                {mode === "register" ? "Account created!" : "Welcome back!"}
-              </h2>
-              <p style={{ color: "#5a6354", fontSize: 14 }}>
-                Loading your field dashboard…
-              </p>
-            </div>
+              <Field label="6-digit code" error={errors.otp}>
+                <input
+                  ref={otpRef}
+                  style={{
+                    ...S.input(errors.otp),
+                    letterSpacing: "0.4em",
+                    textAlign: "center",
+                    fontSize: 22,
+                    fontFamily: "var(--font-mono)",
+                  }}
+                  value={otp}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                />
+              </Field>
+
+              <button
+                style={{ ...S.primary, opacity: busy ? 0.55 : 1 }}
+                disabled={busy}
+                onClick={verifyCode}
+              >
+                {busy ? "Verifying…" : "Verify and continue"}
+              </button>
+
+              <div style={S.otpActions}>
+                <button style={S.link} disabled={busy} onClick={resendCode}>
+                  Send a new code
+                </button>
+                <span style={S.linkDivider} />
+                <button style={S.link} disabled={busy} onClick={goBack}>
+                  Change number
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
     </div>
   );
 }
+
+/* ---------------- components ---------------- */
+
+function Field({ label, error, children }) {
+  return (
+    <div style={S.field}>
+      <label style={S.label}>{label}</label>
+      {children}
+      {error && <p style={S.error}>{error}</p>}
+    </div>
+  );
+}
+
+function Segmented({ value, onChange, options, ariaLabel }) {
+  return (
+    <div style={S.segment} role="group" aria-label={ariaLabel}>
+      {options.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            aria-pressed={active}
+            style={{
+              ...S.segmentBtn,
+              background: active ? "var(--surface-2)" : "transparent",
+              color: active ? "var(--text-primary)" : "var(--text-muted)",
+              boxShadow: active ? "var(--shadow-card)" : "none",
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------------- styles ---------------- */
+
+const S = {
+  page: {
+    minHeight: "100vh",
+    background: "var(--surface-0)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    position: "relative",
+  },
+  themeCorner: { position: "absolute", top: 16, right: 16 },
+
+  card: {
+    width: "100%",
+    maxWidth: 400,
+    background: "var(--surface-1)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-lg)",
+    overflow: "hidden",
+    boxShadow: "var(--shadow-card)",
+  },
+
+  head: { padding: "26px 26px 0" },
+  brand: {
+    fontSize: 17,
+    fontWeight: 600,
+    letterSpacing: "-0.01em",
+    color: "var(--text-primary)",
+  },
+  tagline: {
+    margin: "8px 0 0",
+    fontSize: 13.5,
+    lineHeight: 1.6,
+    color: "var(--text-secondary)",
+  },
+
+  body: { padding: "20px 26px 26px" },
+
+  tabs: {
+    display: "flex",
+    gap: 2,
+    padding: 2,
+    background: "var(--surface-sunken)",
+    borderRadius: "var(--radius)",
+    marginBottom: 6,
+  },
+  tab: {
+    flex: 1,
+    padding: "7px 0",
+    fontSize: 13.5,
+    fontWeight: 500,
+    fontFamily: "inherit",
+    border: "none",
+    borderRadius: 6,
+    cursor: "pointer",
+    transition: "background 120ms, color 120ms",
+  },
+
+  field: { marginTop: 16 },
+  label: {
+    display: "block",
+    fontSize: 11,
+    fontWeight: 500,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color: "var(--text-muted)",
+    marginBottom: 6,
+  },
+  input: (err) => ({
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "10px 12px",
+    fontSize: 15,
+    fontFamily: "inherit",
+    borderRadius: "var(--radius)",
+    border: `1px solid ${err ? "var(--ndvi-stressed)" : "var(--border-strong)"}`,
+    background: "var(--surface-2)",
+    color: "var(--text-primary)",
+    outline: "none",
+  }),
+  select: {
+    padding: "10px 8px",
+    fontSize: 14,
+    fontFamily: "inherit",
+    borderRadius: "var(--radius)",
+    border: "1px solid var(--border-strong)",
+    background: "var(--surface-2)",
+    color: "var(--text-primary)",
+    outline: "none",
+    width: 96,
+  },
+  row: { display: "flex", gap: 8, alignItems: "center" },
+
+  chipRow: { display: "flex", flexWrap: "wrap", gap: 6 },
+  chip: {
+    padding: "6px 12px",
+    borderRadius: 100,
+    fontSize: 13,
+    fontWeight: 500,
+    fontFamily: "inherit",
+    cursor: "pointer",
+    border: "1px solid",
+    transition: "background 120ms, border-color 120ms, color 120ms",
+  },
+
+  error: {
+    margin: "6px 0 0",
+    fontSize: 12.5,
+    color: "var(--ndvi-stressed)",
+    lineHeight: 1.5,
+  },
+
+  primary: {
+    width: "100%",
+    marginTop: 22,
+    padding: "11px 0",
+    fontSize: 14.5,
+    fontWeight: 500,
+    fontFamily: "inherit",
+    borderRadius: "var(--radius)",
+    border: "none",
+    background: "var(--accent)",
+    color: "var(--accent-text)",
+    cursor: "pointer",
+    transition: "background 120ms",
+  },
+
+  fineprint: {
+    margin: "12px 0 0",
+    fontSize: 12,
+    lineHeight: 1.5,
+    color: "var(--text-muted)",
+    textAlign: "center",
+  },
+
+  otpIntro: {
+    margin: "0 0 4px",
+    fontSize: 14,
+    color: "var(--text-secondary)",
+    lineHeight: 1.6,
+  },
+  otpNumber: { fontFamily: "var(--font-mono)", color: "var(--text-primary)" },
+
+  otpActions: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 14,
+  },
+  link: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 13,
+    fontFamily: "inherit",
+    color: "var(--accent)",
+    cursor: "pointer",
+  },
+  linkDivider: { width: 1, height: 12, background: "var(--border-strong)" },
+
+  segment: {
+    display: "inline-flex",
+    background: "var(--surface-sunken)",
+    borderRadius: "var(--radius)",
+    padding: 2,
+    gap: 2,
+    flexShrink: 0,
+  },
+  segmentBtn: {
+    border: "none",
+    borderRadius: 6,
+    padding: "6px 10px",
+    fontSize: 12,
+    fontFamily: "inherit",
+    cursor: "pointer",
+    transition: "background 120ms, color 120ms",
+  },
+};
