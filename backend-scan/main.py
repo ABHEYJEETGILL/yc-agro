@@ -90,15 +90,19 @@ def run_scan_pipeline(polygon_geojson):
         crop_red = red[rmin:rmax, cmin:cmax]
         crop_nir = nir[rmin:rmax, cmin:cmax]
 
-        def norm(a):
-            return ((a - a.min()) / (a.max() - a.min() + 1e-8) * 255).astype(np.uint8)
+        # Satellite crops are far below the resolution this model was
+        # trained on (leaf-scale imagery). Only attempt classification
+        # when the anomaly region is large enough to carry real signal.
+        MIN_CROP_PIXELS = 2000
+        if crop_red.size >= MIN_CROP_PIXELS and crop_nir.size >= MIN_CROP_PIXELS:
+            def norm(a):
+                return ((a - a.min()) / (a.max() - a.min() + 1e-8) * 255).astype(np.uint8)
 
-        if crop_red.size and crop_nir.size:
             img_arr = np.stack([norm(crop_red), norm(crop_nir), norm(crop_nir)], axis=-1)
             img = Image.fromarray(img_arr).resize((640, 640))
             tmp_path = "/tmp/anomaly_crop.jpg"
             img.save(tmp_path)
-            results = yolo_model(tmp_path, conf=0.4)
+            results = yolo_model(tmp_path, conf=0.75)   # was 0.4
             boxes = results[0].boxes
             if boxes is not None and len(boxes):
                 for box in boxes:

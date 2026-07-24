@@ -104,6 +104,7 @@ def run_scan_pipeline(polygon_geojson):
 
     return {
         "date": datetime.now(timezone.utc).date().isoformat(),
+        "scene_date": scene_date,
         "stressedPct": round(stressed_pct, 1),
         "healthyPct": round(healthy_pct, 1),
         "detections": detections,

@@ -429,7 +429,14 @@ function Legend({ t }) {
 }
 
 function Detections({ detections }) {
-  if (!detections || detections.length === 0) return null;
+  if (!detections || detections.length === 0) {
+    return (
+      <p style={{ fontSize: 12, color: C.muted, marginTop: 12, lineHeight: 1.4 }}>
+        Stress detected. Disease identification requires drone imagery — satellite
+        resolution shows <i>where</i>, not <i>what</i>.
+      </p>
+    );
+  }
 
   const SEVERITY = {
     "blast": C.rust,
