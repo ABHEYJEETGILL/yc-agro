@@ -62,7 +62,7 @@ def run_scan_pipeline(polygon_geojson):
 
     scene_date = s2.date().format("YYYY-MM-dd").getInfo()
     cloud_pct = s2.get("CLOUDY_PIXEL_PERCENTAGE").getInfo()
-    print(f"Scene: {scene_date}, cloud%={cloud_pct}")
+    print(f"[scan] scene={scene_date}, cloud%={cloud_pct}")
 
     red_raw = band_to_numpy(s2, "B4", region)
     nir_raw = band_to_numpy(s2, "B8", region)
@@ -70,7 +70,7 @@ def run_scan_pipeline(polygon_geojson):
     nir = nir_raw[nir_raw.dtype.names[0]].astype(float)
     ndvi = (nir - red) / (nir + red + 1e-8)
 
-    print(f"NDVI: min={ndvi.min():.3f} max={ndvi.max():.3f} mean={ndvi.mean():.3f}")
+    print(f"[scan] ndvi min={ndvi.min():.3f} max={ndvi.max():.3f} mean={ndvi.mean():.3f} px={ndvi.size}")
 
     stressed_pct = float(100 * (ndvi < 0.3).mean())
     healthy_pct = float(100 * (ndvi >= 0.5).mean())
