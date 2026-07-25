@@ -394,7 +394,15 @@ export default function FieldDashboard({ user }) {
   const sceneAge = daysSince(scan?.scene_date);
   const isStale = sceneAge !== null && sceneAge > STALE_AFTER_DAYS;
   const stressed = scan?.stressedPct ?? 0;
-  const healthy = scan ? stressed < 5 : false;
+    // Satellite reports a vegetation-index readout, not a health diagnosis.
+  // Low NDVI is expected for early-stage or flooded rice (water drags the
+  // signal down), so we describe what was measured rather than verdict-ing.
+  const ndviMean = scan?.ndvi_mean ?? null;
+  const signal =
+    !scan ? null
+    : ndviMean != null
+      ? (ndviMean >= 0.5 ? "healthy" : ndviMean >= 0.3 ? "moderate" : "low")
+      : (stressed < 30 ? "healthy" : stressed < 70 ? "moderate" : "low");
 
   return (
     <div style={S.page}>
@@ -480,19 +488,35 @@ export default function FieldDashboard({ user }) {
 
           <Card>
             <div style={S.cardHead}>
-              <h2 style={S.cardTitle}>Field health</h2>
+              <h2 style={S.cardTitle}>Vegetation signal</h2>
               {scan && (
                 <span
                   style={{
                     ...S.statusPill,
-                    color: healthy ? "var(--ndvi-healthy)" : "var(--ndvi-stressed)",
-                    borderColor: healthy ? "var(--ndvi-healthy)" : "var(--ndvi-stressed)",
+                    color:
+                      signal === "healthy" ? "var(--ndvi-healthy)"
+                      : signal === "moderate" ? "var(--ndvi-moderate)"
+                      : "var(--ndvi-stressed)",
+                    borderColor:
+                      signal === "healthy" ? "var(--ndvi-healthy)"
+                      : signal === "moderate" ? "var(--ndvi-moderate)"
+                      : "var(--ndvi-stressed)",
                   }}
                 >
-                  {healthy ? "Healthy" : "Needs attention"}
+                  {signal === "healthy" ? "Strong canopy"
+                    : signal === "moderate" ? "Moderate signal"
+                    : "Low signal"}
                 </span>
               )}
             </div>
+            
+            {scan && signal === "low" && (
+              <p style={S.signalNote}>
+                Low vegetation signal is normal for early-stage or flooded rice —
+                standing water lowers the satellite reading. This flags where to
+                look; drone imagery confirms whether it's disease.
+              </p>
+            )}
 
             {isStale && (
               <div style={S.staleBanner}>
@@ -883,6 +907,12 @@ const S = {
     lineHeight: 1.6,
     color: "var(--text-secondary)",
     margin: "6px 0 0",
+  },
+  signalNote: {
+    fontSize: 13,
+    lineHeight: 1.5,
+    color: "var(--text-muted, #5a6354)",
+    margin: "4px 0 12px",
   },
 
   detections: { marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)" },

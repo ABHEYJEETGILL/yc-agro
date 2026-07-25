@@ -70,7 +70,10 @@ def run_scan_pipeline(polygon_geojson):
         .sort("CLOUDY_PIXEL_PERCENTAGE")
         .first()
     )
-
+    # Scene provenance — pulled once from the selected image
+    scene_date = s2.date().format("YYYY-MM-dd").getInfo()
+    cloud_pct = s2.get("CLOUDY_PIXEL_PERCENTAGE").getInfo()
+    
     red_raw = band_to_numpy(s2, "B4", region)
     nir_raw = band_to_numpy(s2, "B8", region)
     red = red_raw[red_raw.dtype.names[0]].astype(float)
@@ -116,6 +119,8 @@ def run_scan_pipeline(polygon_geojson):
         "scene_date": scene_date,
         "stressedPct": round(stressed_pct, 1),
         "healthyPct": round(healthy_pct, 1),
+        "ndvi_mean": round(float(ndvi.mean()), 3),
+        "cloud_pct": round(float(cloud_pct), 1),
         "detections": detections,
         "total_pixels": int(ndvi.size),
     }
