@@ -1,8 +1,16 @@
 node_modules/
 __pycache__/
+*.pyc
 .env
-serviceAccountKey.json
-*.pt
 .DS_Store
 dist/
+.vscode/
+
+# secrets — never commit
+serviceAccountKey.json
+gee-service-account.json
 render-invoker-key.json
+
+# model + scratch files
+*.pt
+anomaly_crop.jpg
