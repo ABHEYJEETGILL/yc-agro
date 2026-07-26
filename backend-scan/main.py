@@ -68,7 +68,7 @@ def run_scan_pipeline(polygon_geojson):
             (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%d"),
             datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         )
-        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 10))
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40))
         .sort("CLOUDY_PIXEL_PERCENTAGE")
         .first()
     )
