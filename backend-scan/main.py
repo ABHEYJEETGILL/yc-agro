@@ -69,7 +69,7 @@ def run_scan_pipeline(polygon_geojson):
             datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         )
         .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40))
-        .sort("CLOUDY_PIXEL_PERCENTAGE")
+        .sort("system:time_start", False)
         .first()
     )
     # Scene provenance — one round-trip instead of two.
