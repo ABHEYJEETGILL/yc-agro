@@ -3,7 +3,7 @@ import { auth } from "./firebase";
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 
 // ============================================================
-// YC Agro — Log in / Register
+// Vangill — Log in / Register
 //
 // Firebase Phone Auth (signInWithPhoneNumber + invisible
 // RecaptchaVerifier). On register, POSTs the profile to:
@@ -222,7 +222,7 @@ export default function AuthScreen({ onAuthed }) {
 
       <div style={S.card}>
         <header style={S.head}>
-          <div style={S.brand}>YC Agro</div>
+          <div style={S.brand}>Vangill</div>
           <p style={S.tagline}>
             Satellite monitoring for your fields. Find stress early, spray only
             where it's needed.

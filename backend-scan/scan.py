@@ -1,5 +1,5 @@
 """
-YC Agro — Local scan runner
+Vangill — Local scan runner
 Run this manually to trigger a scan for a specific farmer:
   python scan.py <farmer_uid>
 """

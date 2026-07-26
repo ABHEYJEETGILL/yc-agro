@@ -1,5 +1,5 @@
 """
-YC Agro — Flask backend (main API)
+Vangill — Flask backend (main API)
 Scan pipeline runs separately in backend-scan/scan.py (heavy ML deps).
 This service stays lightweight for Render's free tier.
 """

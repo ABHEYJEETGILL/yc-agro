@@ -1,5 +1,5 @@
 """
-YC Agro — Scan service (Cloud Run)
+Vangill — Scan service (Cloud Run)
 HTTP service that runs the NDVI + YOLO pipeline for a farmer's field.
 Endpoints:
   POST /scan       { "uid": "<farmer_uid>" }   → scan one farmer

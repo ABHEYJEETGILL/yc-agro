@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
 // ============================================================
-// YC Agro — Field Dashboard
+// Vangill — Field Dashboard
 //
 // Map-first layout: the field is the object, panels annotate it.
 // Chrome is neutral (theme.css tokens); the only saturated color
@@ -400,7 +400,7 @@ export default function FieldDashboard({ user }) {
     <div style={S.page}>
       <header style={S.header}>
         <div style={S.brand}>
-          <span style={S.brandMark}>YC Agro</span>
+          <span style={S.brandMark}>Vangill</span>
           <span style={S.brandDivider} />
           <span style={S.brandContext}>Field monitoring</span>
         </div>
