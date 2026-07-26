@@ -51,11 +51,13 @@ export default function LandingPage({ onEnter }) {
       <header style={S.bar}>
         <div style={{ ...S.wrap, ...S.barInner }}>
           <div style={S.logo}>
-            <svg style={S.logoMark} viewBox="0 -807 908 908" aria-hidden="true">
-              <g transform="scale(1,-1) translate(121,0)" fill="currentColor">
-                <path d="M678 708V688Q656 680 631.5 653.0Q607 626 586 569L375 -2Q367 -1 358.0 -1.0Q349 -1 340 -1Q332 -1 323.0 -1.0Q314 -1 306 -2L51 624Q37 660 20.0 673.5Q3 687 -12 688V708Q18 707 58.5 706.0Q99 705 140 705Q186 705 226.5 706.0Q267 707 292 708V688Q260 687 242.0 680.5Q224 674 222.0 656.5Q220 639 234 604L416 141L395 116L533 488Q560 563 561.0 606.0Q562 649 540.0 668.0Q518 687 477 688V708Q511 707 541.0 706.0Q571 705 602 705Q624 705 643.5 706.0Q663 707 678 708Z" />
-              </g>
-            </svg>
+            <span style={S.logoBox}>
+              <svg style={S.logoMark} viewBox="0 -807 908 908" aria-hidden="true">
+                <g transform="scale(1,-1) translate(121,0)" fill="var(--logo-v, #111)">
+                  <path d="M678 708V688Q656 680 631.5 653.0Q607 626 586 569L375 -2Q367 -1 358.0 -1.0Q349 -1 340 -1Q332 -1 323.0 -1.0Q314 -1 306 -2L51 624Q37 660 20.0 673.5Q3 687 -12 688V708Q18 707 58.5 706.0Q99 705 140 705Q186 705 226.5 706.0Q267 707 292 708V688Q260 687 242.0 680.5Q224 674 222.0 656.5Q220 639 234 604L416 141L395 116L533 488Q560 563 561.0 606.0Q562 649 540.0 668.0Q518 687 477 688V708Q511 707 541.0 706.0Q571 705 602 705Q624 705 643.5 706.0Q663 707 678 708Z" />
+                </g>
+              </svg>
+            </span>
             Vangill
           </div>
           <button style={S.barCta} onClick={onEnter}>
@@ -342,7 +344,8 @@ const S = {
   },
   barInner: { display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 },
   logo: { fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: 20, letterSpacing: "0", display: "flex", alignItems: "center", gap: 9 },
-  logoMark: { width: 20, height: 20, flexShrink: 0 },
+  logoBox: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 7, background: "#ffffff", flexShrink: 0 },
+  logoMark: { width: 18, height: 18, display: "block" },
   barCta: {
     fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-secondary)",
     padding: "7px 14px", border: "1px solid var(--border-strong)", borderRadius: 7,
