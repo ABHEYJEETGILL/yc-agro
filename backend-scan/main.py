@@ -70,9 +70,15 @@ def run_scan_pipeline(polygon_geojson):
         .sort("CLOUDY_PIXEL_PERCENTAGE")
         .first()
     )
-    # Scene provenance — pulled once from the selected image
-    scene_date = s2.date().format("YYYY-MM-dd").getInfo()
-    cloud_pct = s2.get("CLOUDY_PIXEL_PERCENTAGE").getInfo()
+    # Scene provenance — one round-trip instead of two.
+    # Each .getInfo() forces Earth Engine to re-evaluate the whole
+    # filter chain server-side, so batching them halves that cost.
+    meta = ee.Dictionary({
+        "date": s2.date().format("YYYY-MM-dd"),
+        "cloud": s2.get("CLOUDY_PIXEL_PERCENTAGE"),
+    }).getInfo()
+    scene_date = meta["date"]
+    cloud_pct = meta["cloud"]
     
     red_raw = band_to_numpy(s2, "B4", region)
     nir_raw = band_to_numpy(s2, "B8", region)

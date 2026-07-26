@@ -162,7 +162,7 @@ export default function FieldDashboard({ user }) {
   const pollForScan = useCallback(() => {
     const started = Date.now();
     const poll = async () => {
-      if (Date.now() - started > 180000) {
+      if (Date.now() - started > 300000) {
         setScanLoading(false);
         setError("The scan is taking longer than usual. Reload in a few minutes to check.");
         return;
