@@ -12,6 +12,7 @@ import io
 import traceback
 from datetime import datetime, timedelta, timezone
 
+import time
 import numpy as np
 import requests
 import ee
@@ -57,6 +58,7 @@ def band_to_numpy(image, band_name, region, scale=10):
 
 
 def run_scan_pipeline(polygon_geojson):
+    t0 = time.time()
     region = ee.Geometry.Polygon(polygon_geojson["coordinates"])
 
     s2 = (
@@ -79,13 +81,24 @@ def run_scan_pipeline(polygon_geojson):
     }).getInfo()
     scene_date = meta["date"]
     cloud_pct = meta["cloud"]
+    print(f"[timing] metadata fetch: {time.time() - t0:.1f}s", flush=True)
     
+    t1 = time.time()
     red_raw = band_to_numpy(s2, "B4", region)
+    print(f"[timing] B4 download: {time.time() - t1:.1f}s", flush=True)
+
+    t2 = time.time()
     nir_raw = band_to_numpy(s2, "B8", region)
+    print(f"[timing] B8 download: {time.time() - t2:.1f}s", flush=True)
+    
+    # red_raw = band_to_numpy(s2, "B4", region)
+    # nir_raw = band_to_numpy(s2, "B8", region)
     red = red_raw[red_raw.dtype.names[0]].astype(float)
     nir = nir_raw[nir_raw.dtype.names[0]].astype(float)
     ndvi = (nir - red) / (nir + red + 1e-8)
 
+    print(f"[timing] TOTAL: {time.time() - t0:.1f}s", flush=True)
+    
     stressed_pct = float(100 * (ndvi < 0.3).mean())
     healthy_pct = float(100 * (ndvi >= 0.5).mean())
 
