@@ -255,7 +255,7 @@ export default function LandingPage({ onEnter }) {
               <div style={S.founderBadge} aria-hidden="true">V</div>
               <div>
                 <div style={S.founderName}>Abheyjeet Gill</div>
-                <div style={S.founderRole}>Solo founder · 2nd-year CS · Bathinda, Punjab</div>
+                <div style={S.founderRole}>Solo founder · 3rd-year CS · Bathinda, Punjab</div>
                 <p style={S.founderP}>
                   Vangill started on a single paddy field in Bathinda — the one still
                   plotted in the season log above. I built the whole stack solo: the
