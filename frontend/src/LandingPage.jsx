@@ -170,7 +170,7 @@ export default function LandingPage({ onEnter }) {
               patches. Most tools just don't tell you how fresh the view is.
             </p>
 
-            <div ref={addReveal} className="reveal" style={S.contrast}>
+            <div ref={addReveal} className="reveal vg-contrast" style={S.contrast}>
               <div style={S.contrastCell}>
                 <h3 style={{ ...S.contrastH3, color: "var(--text-muted)" }}>Typical crop app</h3>
                 <div style={S.contrastBig}>"Your field is 94% healthy"</div>
@@ -200,7 +200,7 @@ export default function LandingPage({ onEnter }) {
             <h2 ref={addReveal} className="reveal" style={S.h2}>
               Not a mockup. A working detector on a real field.
             </h2>
-            <div ref={addReveal} className="reveal" style={S.metrics}>
+            <div ref={addReveal} className="reveal vg-metrics" style={S.metrics}>
               {[
                 ["91.7", "%", <>mAP<sub style={{ fontSize: 11 }}>50</sub> on the rice-disease model (YOLOv8m)</>],
                 ["43", "k", "labelled training images across 10 disease classes"],
@@ -251,11 +251,11 @@ export default function LandingPage({ onEnter }) {
             <h2 ref={addReveal} className="reveal" style={S.h2}>
               One founder, one field, a working pipeline.
             </h2>
-            <div ref={addReveal} className="reveal" style={S.founder}>
+            <div ref={addReveal} className="reveal vg-founder" style={S.founder}>
               <div style={S.founderBadge} aria-hidden="true">V</div>
               <div>
                 <div style={S.founderName}>Abheyjeet Gill</div>
-                <div style={S.founderRole}>Solo founder · 3rd-year CS · Bathinda, Punjab</div>
+                <div style={S.founderRole}>Solo founder · 2nd-year CS · Bathinda, Punjab</div>
                 <p style={S.founderP}>
                   Vangill started on a single paddy field in Bathinda — the one still
                   plotted in the season log above. I built the whole stack solo: the
@@ -313,6 +313,21 @@ const scoped = `
   .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s ease; }
   .reveal.in { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
+
+  /* Responsive collapse. These live here rather than in the inline
+     style objects because React inline styles cannot express media
+     queries — the base (desktop) grid is set inline, and these rules
+     override it on narrow screens. */
+  @media (max-width: 720px) {
+    .vg-metrics { grid-template-columns: 1fr 1fr !important; }
+    .vg-contrast { grid-template-columns: 1fr !important; }
+  }
+  @media (max-width: 640px) {
+    .vg-founder { grid-template-columns: 1fr !important; padding: 26px !important; }
+  }
+  @media (max-width: 560px) {
+    .vg-metrics { grid-template-columns: 1fr !important; }
+  }
 `;
 
 const S = {
