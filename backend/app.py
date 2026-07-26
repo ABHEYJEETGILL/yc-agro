@@ -180,7 +180,7 @@ def get_scan():
 @app.post("/api/farmers/me/scan")
 @require_auth
 def trigger_scan():
-    """Kick off a scan on Cloud Run. Returns immediatelyy (fire-and-forget)."""
+    """Kick off a scan on Cloud Run. Returns immediately (fire-and-forget)."""
     doc_ref = db.collection("farmers").document(g.uid)
     snap = doc_ref.get()
     if not snap.exists:
@@ -188,9 +188,13 @@ def trigger_scan():
     if not snap.to_dict().get("field"):
         return jsonify(error="Draw and save your field boundary first"), 400
 
+    # Mark running BEFORE dispatching. Cloud Run owns every status
+    # write from here on — if we set it afterwards we can overwrite
+    # the "done" it already wrote on a fast scan.
+    doc_ref.update({"scan_status": "running"})
+
     try:
         token = get_scan_service_token()
-        # short timeout - we don't wait for the scan, just for it to be accepted
         http_requests.post(
             f"{SCAN_SERVICE_URL}/scan",
             json={"uid": g.uid},
@@ -198,14 +202,13 @@ def trigger_scan():
             timeout=5,
         )
     except http_requests.exceptions.ReadTimeout:
-        # expected - Cloud Run is still working, that's fine
+        # expected on slower scans — Cloud Run is still working
         pass
     except Exception as err:
         print("Failed to trigger scan:", err)
+        doc_ref.update({"scan_status": "error"})
         return jsonify(error="Couldn't start scan"), 500
-    
-    
-    doc_ref.update({"scan_status": "running"})
+
     return jsonify(status="started"), 202
 
 
