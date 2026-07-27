@@ -289,7 +289,7 @@ export default function LandingPage({ onEnter }) {
               <button style={{ ...S.btn, ...S.btnPrimary }} onClick={onEnter}>
                 Open the app
               </button>
-              <a style={{ ...S.btn, ...S.btnGhost }} href="mailto:hello@vangill.com">
+              <a style={{ ...S.btn, ...S.btnGhost }} href="mailto:gill@vangill.com">
                 Get in touch
               </a>
             </div>
@@ -301,7 +301,7 @@ export default function LandingPage({ onEnter }) {
         <div style={{ ...S.wrap, ...S.footInner }}>
           <span>Vangill · precision crop monitoring</span>
           <span>
-            <a style={S.footLink} href="mailto:hello@vangill.com">hello@vangill.com</a>
+            <a style={S.footLink} href="mailto:gill@vangill.com">gill@vangill.com</a>
           </span>
         </div>
       </footer>
