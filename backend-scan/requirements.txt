@@ -6,3 +6,4 @@ ultralytics
 pillow
 numpy
 requests
+google-cloud-storage

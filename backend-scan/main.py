@@ -12,6 +12,7 @@ import io
 import traceback
 from datetime import datetime, timedelta, timezone
 
+
 import time
 import numpy as np
 import requests
@@ -39,6 +40,8 @@ ee.Initialize(ee_credentials)
 
 yolo_model = YOLO(YOLO_MODEL_PATH)
 
+from drone.drone_pipeline import init_drone_routes
+init_drone_routes(app, db)
 
 # ── Helpers ─────────────────────────────────────────────────
 def from_firestore_safe(stored):
