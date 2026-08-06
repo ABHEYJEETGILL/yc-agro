@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the service code and model
 COPY main.py .
+COPY drone/ ./drone/
 COPY ycagro_v3_best_91.pt .
 
 # Cloud Run provides PORT; gunicorn binds to it

@@ -30,14 +30,14 @@ import threading
 
 from flask import Blueprint, jsonify, request
 
-from waypoint_generator import generate_litchi_csv_from_polygon
-from inference import (
+from .waypoint_generator import generate_litchi_csv_from_polygon
+from .inference import (
     RiceDiseaseModel,
     detections_for_frames,
     aggregate_to_grid,
     build_disease_map,
 )
-from storage import (
+from .storage import (
     upload_csv,
     list_mission_frames,
     download_frames,
