@@ -12,7 +12,7 @@ import io
 import traceback
 from datetime import datetime, timedelta, timezone
 
-
+import base64
 import time
 import numpy as np
 import requests
@@ -59,6 +59,47 @@ def band_to_numpy(image, band_name, region, scale=10):
     r.raise_for_status()
     return np.load(io.BytesIO(r.content))
 
+# NDVI class colours - matches the app's theme
+ZONE_COLOURS = {
+    "healthy": (47, 107, 53),   # green
+    "moderate": (217, 164, 65), # yellow
+    "stressed": (166, 61, 47), # red
+}
+
+def ndvi_overlay_png(ndvi, valid_mask, max_dim=512):
+    """Classify each NDVI pixel into a health zone and return a base64 PNG.
+    Pixels outside the field (no data) are left fully transparent so the
+    overlays hugs the boundary instead of filing the bounding box.
+    """
+    h, w = ndvi.shape
+    rgba = np.zeros((h, w, 4), dtype=np.uint8)
+    
+    stressed = valid_mask & (ndvi < 0.3)
+    moderate = valid_mask & (ndvi >= 0.3) & (ndvi < 0.5)
+    healthy = valid_mask & (ndvi >= 0.5)
+    
+    for mask, key in ((stressed, "stressed"), (moderate, "moderate"), (healthy, "healthy")):
+        r, g, b = ZONE_COLOURS[key]
+        rgba[mask] = (r, g, b, 190)     # ~75% opacity so imagery shows through
+    img = Image.fromarray(rgba, mode="RGBA")
+    
+    # Upscale with nearest-neighbour so pixels stay crisp squares rather
+    # than blurring — at 10m/px the blocks are the honest unit of measurement.
+    
+    scale = max(1, int(max_dim / max(h, w)))
+    if scale > 1:
+        img = img.resize((w * scale, h * scale), Image.NEAREST)
+        
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+def polygon_bounds(polygon_geojson):
+    """[[south, west], [north, east]] - Leaflet's imageOverlay bounds format."""
+    ring = polygon_geojson["coordinates"][0]
+    lngs = [p[0] for p in ring]
+    lats = [p[1] for p in ring]
+    return [[min(lats), min(lngs)], [max(lats), max(lngs)]]
 
 def run_scan_pipeline(polygon_geojson):
     t0 = time.time()
@@ -100,10 +141,16 @@ def run_scan_pipeline(polygon_geojson):
     nir = nir_raw[nir_raw.dtype.names[0]].astype(float)
     ndvi = (nir - red) / (nir + red + 1e-8)
 
+    #Pixels outside the field come back as nodata (0) from Earth Engine
+    valid_mask = (red > 0) & (nir > 0)
+    
+    overlay_b64 = ndvi_overlay_png(ndvi, valid_mask)
+    overlay_bounds = polygon_bounds(polygon_geojson)
+
     print(f"[timing] TOTAL: {time.time() - t0:.1f}s", flush=True)
     
-    stressed_pct = float(100 * (ndvi < 0.3).mean())
-    healthy_pct = float(100 * (ndvi >= 0.5).mean())
+    stressed_pct = float(100 * (ndvi[valid_mask] < 0.3).mean()) if valid_mask.any() else 0.0
+    healthy_pct = float(100 * (ndvi[valid_mask] >= 0.5).mean()) if valid_mask.any() else 0.0
 
     detections = []
     anomaly_mask = ndvi < 0.3
@@ -145,6 +192,8 @@ def run_scan_pipeline(polygon_geojson):
         "cloud_pct": round(float(cloud_pct), 1),
         "detections": detections,
         "total_pixels": int(ndvi.size),
+        "overlay_png": overlay_b64,
+        "overlay_bounds": overlay_bounds,
     }
 
 

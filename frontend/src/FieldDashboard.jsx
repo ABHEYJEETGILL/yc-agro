@@ -90,6 +90,7 @@ export default function FieldDashboard({ user }) {
   const mapObj = useRef(null);
   const layerRef = useRef(null);
   const drawnRef = useRef(null);
+  const overlayRef = useRef(null);
 
   const [hasField, setHasField] = useState(false);
   const [area, setArea] = useState(0); // always stored in acres
@@ -105,6 +106,7 @@ export default function FieldDashboard({ user }) {
   const [savedField, setSavedField] = useState(null);
   const [fieldLoaded, setFieldLoaded] = useState(false);
   const [error, setError] = useState(null);
+  const [showOverlay, setShowOverlay] = useState(true);
 
   // ---------- theme ----------
   useEffect(() => {
@@ -353,6 +355,34 @@ export default function FieldDashboard({ user }) {
       layerRef.current.setStyle({ color: accentColor() });
     }
   }, [theme]);
+
+  
+  // Paint the NDVI zone overlay on the map whenever a new scan lands.
+  // Removes the previous one first so scans don't stack.
+  useEffect(() => {
+    const map = mapObj.current;
+    if (!map || !window.L) return;
+
+    if (overlayRef.current) {
+      map.removeLayer(overlayRef.current);
+      overlayRef.current = null;
+    }
+
+    if (!showOverlay || !scan?.overlay_png || !scan?.overlay_bounds) return;
+
+    overlayRef.current = window.L.imageOverlay(
+      `data:image/png;base64,${scan.overlay_png}`,
+      scan.overlay_bounds,
+      { opacity: 0.75, interactive: false }
+    ).addTo(map);
+
+    return () => {
+      if (overlayRef.current && mapObj.current) {
+        mapObj.current.removeLayer(overlayRef.current);
+        overlayRef.current = null;
+      }
+    };
+  }, [scan, showOverlay]);
 
   function layerToGeoJSON(layer) {
     const latlngs = layer.getLatLngs()[0];
