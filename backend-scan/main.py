@@ -95,11 +95,18 @@ def ndvi_overlay_png(ndvi, valid_mask, max_dim=512):
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 def polygon_bounds(polygon_geojson):
-    """[[south, west], [north, east]] - Leaflet's imageOverlay bounds format."""
+    
+    # Firestore rejects nested arrays, so return a flat map.
+    # Reassembled into Leaflet's [[s,w],[n,e]] format on the frontend."""
     ring = polygon_geojson["coordinates"][0]
     lngs = [p[0] for p in ring]
     lats = [p[1] for p in ring]
-    return [[min(lats), min(lngs)], [max(lats), max(lngs)]]
+    return {
+        "south": min(lats),
+        "west": min(lngs),
+        "north": max(lats),
+        "east": max(lngs),
+    }
 
 def run_scan_pipeline(polygon_geojson):
     t0 = time.time()

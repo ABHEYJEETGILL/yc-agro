@@ -370,9 +370,11 @@ export default function FieldDashboard({ user }) {
 
     if (!showOverlay || !scan?.overlay_png || !scan?.overlay_bounds) return;
 
+    const bounds = [[b.south, b.west], [b.north, b.east]];
+
     overlayRef.current = window.L.imageOverlay(
       `data:image/png;base64,${scan.overlay_png}`,
-      scan.overlay_bounds,
+      bounds,
       { opacity: 0.75, interactive: false }
     ).addTo(map);
 
